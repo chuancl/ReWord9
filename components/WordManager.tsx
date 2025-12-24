@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { WordCategory, WordEntry, MergeStrategyConfig, WordTab, Scenario, AppView } from '../types';
 import { DEFAULT_MERGE_STRATEGY } from '../constants';
@@ -35,7 +36,7 @@ const IMPORT_TEMPLATE = [
     "mixedSentence": "It was pure serendipity (机缘巧合) that we met.",
     "dictionaryExample": "Nature has created wonderful things by serendipity.",
     "dictionaryExampleTranslation": "大自然通过机缘巧合创造了奇妙的事物。",
-    "inflections": ["serendipities"],
+    "inflections": ["serendipities", "serendipitous"],
     "tags": ["CET6", "GRE", "Literary"],
     "importance": 3,
     "cocaRank": 15000,
@@ -70,7 +71,7 @@ const IMPORT_TEMPLATE = [
     "mixedSentence": "选填。中英混合例句 (单词替换后的句子)",
     "dictionaryExample": "选填。词典标准例句",
     "dictionaryExampleTranslation": "选填。词典例句翻译",
-    "inflections": "选填。字符串数组。单词的变形列表 (如复数、过去式、分词)。例如: ['books', 'booking']",
+    "inflections": "选填。字符串数组（重点）。单词的变形列表 (如复数、过去式、分词)，用于网页端的词态自动匹配。例如: ['books', 'booking', 'booked']",
     "tags": "选填。字符串数组。单词标签 (如考试等级、学科)。例如: ['CET4', 'Computer']",
     "importance": "选填。数字 (0-5)。柯林斯星级 (Collins Stars)，5为最高频。",
     "cocaRank": "选填。数字。COCA 语料库词频排名，数值越小越常用。",
@@ -106,24 +107,19 @@ export const WordManager: React.FC<WordManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWords, setSelectedWords] = useState<Set<string>>(new Set());
 
-  // Dropdown states
   const [isImportDropdownOpen, setIsImportDropdownOpen] = useState(false);
   const importDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Handle deep linking / initial props
   useEffect(() => {
       if (initialTab) setActiveTab(initialTab);
       if (initialSearchQuery !== undefined) setSearchQuery(initialSearchQuery);
   }, [initialTab, initialSearchQuery]);
 
-  // Modal States
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
-  // Toast State
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Configs
   const [showConfig, setShowConfig] = useState({
     showPhonetic: true,
     showMeaning: true,
@@ -139,7 +135,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
              const saved = JSON.parse(savedConfigStr);
              let needsUpdate = false;
              
-             // Check and append missing example order items
              const requiredItems = [
                  { id: 'inflections', label: '词态变化 (Morphology)' },
                  { id: 'phrases', label: '常用短语 (Phrases)' },
@@ -154,7 +149,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
                  }
              });
 
-             // Check missing boolean flags
              if (typeof saved.showPartOfSpeech === 'undefined') { saved.showPartOfSpeech = true; needsUpdate = true; }
              if (typeof saved.showTags === 'undefined') { saved.showTags = true; needsUpdate = true; }
              if (typeof saved.showImportance === 'undefined') { saved.showImportance = true; needsUpdate = true; }
@@ -183,7 +177,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
       localStorage.setItem('context-lingo-merge-config', JSON.stringify(mergeConfig));
   }, [mergeConfig]);
 
-  // Click outside to close dropdown
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
           if (importDropdownRef.current && !importDropdownRef.current.contains(event.target as Node)) {
@@ -352,7 +345,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
   };
 
   const handleOpenBatchGenerator = () => {
-      // 使用 (browser.runtime as any).getURL 修复 Property 'getURL' does not exist 错误
       const url = (browser.runtime as any).getURL('/batch-generator.html');
       window.open(url, '_blank');
       setIsImportDropdownOpen(false);
@@ -378,7 +370,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
            return;
         }
 
-        // Determine target category based on active tab
         const targetCategory = activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab;
         
         let successCount = 0;
@@ -386,7 +377,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
         showToast(`开始处理 ${candidates.length} 个单词...`, 'info');
         const newEntriesToAdd: WordEntry[] = [];
 
-        // Helper to check duplicates
         const isDuplicate = (t: string, trans?: string) => {
             const existing = entries.some(e => 
                 e.text.toLowerCase() === t.toLowerCase() && 
@@ -400,7 +390,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
         };
 
         for (const candidate of candidates) {
-            // Validation: Must have text. 
             if (!candidate.text || typeof candidate.text !== 'string' || candidate.text.includes('必填')) {
                 continue;
             }
@@ -683,7 +672,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
                             </button>
                         </Tooltip>
 
-                        {/* 精致的组合下拉按钮  (Split Button) */}
                         <div className="relative inline-flex items-stretch" ref={importDropdownRef}>
                             <Tooltip text="支持 JSON 格式文件。将直接导入文件中的数据至当前标签页。">
                                 <button 
@@ -701,7 +689,6 @@ export const WordManager: React.FC<WordManagerProps> = ({
                                 <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isImportDropdownOpen ? 'rotate-180' : ''}`} />
                             </button>
 
-                            {/* 下拉菜单 */}
                             {isImportDropdownOpen && (
                                 <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
                                     <div className="px-4 py-2 border-b border-slate-50 mb-1">

@@ -19,6 +19,7 @@ const MAPPING_FIELDS = [
     { id: 'phoneticUk', label: '英式音标 (phoneticUk)' },
     { id: 'partOfSpeech', label: '词性 (partOfSpeech)' },
     { id: 'englishDefinition', label: '英文定义 (englishDefinition)' },
+    { id: 'inflections', label: '词态变化 (inflections) - 需数组或字符串', type: 'array' },
     { id: 'contextSentence', label: '例句 (contextSentence)' },
     { id: 'contextSentenceTranslation', label: '例句翻译 (contextSentenceTranslation)' },
     { id: 'tags', label: '标签 (tags)', type: 'array' },
@@ -132,17 +133,16 @@ export const BatchDataGenerator: React.FC = () => {
         const reader = new FileReader();
         reader.onload = (event) => {
             const text = event.target?.result as string;
-            // 支持换行或逗号分隔
             const words = text.split(/[\n,，\r]/).map(w => w.trim()).filter(Boolean);
             if (words.length > 0) {
                 setImportedWords(words);
-                fetchTemplateData(words[0]); // 自动用第一个词获取结构
+                fetchTemplateData(words[0]); 
             } else {
                 showToast('文件中未发现有效的单词列表', 'warning');
             }
         };
         reader.readAsText(file);
-        e.target.value = ''; // Reset input
+        e.target.value = ''; 
     };
 
     const toggleExpand = (path: string) => {
@@ -169,7 +169,6 @@ export const BatchDataGenerator: React.FC = () => {
         saveHistory(newMappings, lists);
     };
 
-    // 树形渲染
     const renderNode = (key: string, value: any, path: string, depth: number) => {
         const isObject = value !== null && typeof value === 'object';
         const isExpanded = expandedPaths.has(path);
@@ -216,9 +215,6 @@ export const BatchDataGenerator: React.FC = () => {
         );
     };
 
-    /**
-     * 执行全量或预览生成逻辑
-     */
     const runGeneration = async (isFull: boolean) => {
         const words = isFull ? importedWords : importedWords.slice(0, 1);
         if (words.length === 0) {
@@ -294,6 +290,11 @@ export const BatchDataGenerator: React.FC = () => {
 
                 const pushResult = (entry: any) => {
                     if (!entry.text) entry.text = word;
+                    // 对 inflections 等数组字段进行特殊处理：支持由逗号分隔的字符串或数组
+                    if (entry.inflections) {
+                        if (typeof entry.inflections === 'string') entry.inflections = entry.inflections.split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean);
+                        else if (!Array.isArray(entry.inflections)) entry.inflections = [String(entry.inflections)];
+                    }
                     if (Object.keys(entry).length > 1) resultsForThisWord.push({ ...entry });
                 };
 
@@ -463,6 +464,13 @@ export const BatchDataGenerator: React.FC = () => {
                                                         </div>
                                                         <div className="bg-amber-50 text-amber-700 px-2 py-1 rounded text-[10px] font-bold border border-amber-100">{item.translation}</div>
                                                     </div>
+                                                    {item.inflections && item.inflections.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5 my-2">
+                                                            {item.inflections.map((inf: string) => (
+                                                                <span key={inf} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono border border-slate-200">{inf}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                     <div className="space-y-1.5 mt-3">
                                                         {item.contextSentence && <div className="text-[11px] text-slate-600 italic border-l-2 border-blue-400 pl-3 leading-relaxed">{item.contextSentence}</div>}
                                                         {item.englishDefinition && <div className="text-[10px] text-slate-400 leading-snug">{item.englishDefinition}</div>}
