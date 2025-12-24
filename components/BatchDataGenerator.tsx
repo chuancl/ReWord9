@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Play, Download, Trash2, ChevronRight, ChevronDown, List, MapPin, Database, Send, AlertCircle, HelpCircle, Code, Copy, Check, Info } from 'lucide-react';
 import { Logo } from './Logo';
 import { Toast, ToastMessage } from './ui/Toast';
@@ -20,12 +20,12 @@ const MAPPING_FIELDS = [
 ];
 
 interface MappingConfig {
-    path: string; // 存储的是模板路径，如 root.ec.word.usphone
+    path: string; // 存储的是归一化路径，如 root.ec.word.usphone
     field: string;
 }
 
 interface ListConfig {
-    path: string; // 模板路径，如 root.ec.word
+    path: string; // 归一化路径，如 root.ec.word
 }
 
 export const BatchDataGenerator: React.FC = () => {
@@ -47,7 +47,7 @@ export const BatchDataGenerator: React.FC = () => {
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const showToast = (message: string, type: ToastMessage['type'] = 'success') => setToast({ id: Date.now(), message, type });
 
-    // 路径归一化：将 root.ec.word.0.usphone 转换为 root.ec.word.usphone
+    // 路径归一化：将实例路径 root.ec.word.0.usphone 转换为模板路径 root.ec.word.usphone
     const normalizePath = (path: string) => {
         return path.replace(/\.\d+/g, '');
     };
@@ -124,41 +124,40 @@ export const BatchDataGenerator: React.FC = () => {
         return (
             <div key={path} className="select-none">
                 <div 
-                    className={`flex items-center gap-2 py-1.5 px-3 rounded-xl transition-all group mb-0.5 border
-                        ${isList ? 'bg-purple-50 border-purple-200 shadow-sm' : 
-                          mappedField ? 'bg-blue-50 border-blue-200 shadow-sm' : 'border-transparent hover:bg-slate-50'}`}
+                    className={`flex items-center gap-2 py-1 px-3 rounded-xl transition-all group mb-1 border
+                        ${isList ? 'bg-purple-50 border-purple-300 ring-1 ring-purple-100 shadow-sm' : 
+                          mappedField ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-100 shadow-sm' : 'border-transparent hover:bg-slate-50'}`}
                     style={{ marginLeft: `${depth * 20}px` }}
                 >
                     {isObject ? (
-                        <button onClick={() => toggleExpand(path)} className="p-1 hover:bg-white rounded-md transition-colors">
+                        <button onClick={() => toggleExpand(path)} className="p-1 hover:bg-white rounded-md transition-colors shrink-0">
                             {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
                         </button>
-                    ) : <div className="w-6" />}
+                    ) : <div className="w-6 shrink-0" />}
 
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className={`font-mono text-sm font-bold ${isList ? 'text-purple-700' : mappedField ? 'text-blue-700' : 'text-slate-600'}`}>{key}</span>
-                        <span className="text-slate-300">|</span>
+                        <span className={`font-mono text-sm font-bold shrink-0 ${isList ? 'text-purple-700' : mappedField ? 'text-blue-700' : 'text-slate-600'}`}>{key}</span>
+                        <span className="text-slate-300 shrink-0">:</span>
                         
                         {!isObject && (
-                            <span className="text-sm text-slate-400 truncate font-mono" title={String(value)}>
+                            <span className="text-sm text-slate-400 truncate font-mono italic" title={String(value)}>
                                 {typeof value === 'string' ? `"${value}"` : String(value)}
                             </span>
                         )}
 
                         {isObject && (
-                            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                            <span className="text-[9px] font-black text-slate-300 bg-slate-100/50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
                                 {Array.isArray(value) ? `Array[${value.length}]` : 'Object'}
                             </span>
                         )}
                     </div>
 
-                    {/* 操作区：标记后保持 opacity-100 */}
-                    <div className={`flex items-center gap-2 transition-all ${isList || mappedField ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    {/* 操作区：标记后通过 opacity-100 保持可见 */}
+                    <div className={`flex items-center gap-2 transition-all shrink-0 ${isList || mappedField ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <button 
                             onClick={() => toggleList(path)}
                             className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 border
                                 ${isList ? 'bg-purple-600 border-purple-600 text-white shadow-md' : 'bg-white text-slate-400 border-slate-200 hover:border-purple-400 hover:text-purple-600'}`}
-                            title="标记为循环列表项"
                         >
                             <List className="w-3 h-3" />
                             {isList ? 'List Item' : 'Set List'}
@@ -170,14 +169,14 @@ export const BatchDataGenerator: React.FC = () => {
                             className={`text-[10px] font-bold h-7 rounded-lg border outline-none transition-all px-2 shadow-sm
                                 ${mappedField ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-400'}`}
                         >
-                            <option value="">Map To Field...</option>
+                            <option value="">Map Field...</option>
                             {MAPPING_FIELDS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
                         </select>
                     </div>
                 </div>
 
                 {isObject && isExpanded && (
-                    <div className="border-l-2 border-slate-100 ml-5 my-1">
+                    <div className="border-l-2 border-slate-100 ml-4.5 my-0.5">
                         {Object.entries(value).map(([k, v]) => renderNode(k, v, `${path}.${k}`, depth + 1))}
                     </div>
                 )}
@@ -186,7 +185,7 @@ export const BatchDataGenerator: React.FC = () => {
     };
 
     /**
-     * 核心逻辑：递归生成数据
+     * 生成逻辑优化
      */
     const generateEntries = () => {
         if (!jsonData) return;
@@ -195,105 +194,68 @@ export const BatchDataGenerator: React.FC = () => {
         const mappingMap = new Map(mappings.map(m => [m.path, m.field]));
         const listSet = new Set(lists.map(l => l.path));
 
-        /**
-         * @param data 当前处理的数据
-         * @param currentPath 当前实例路径，如 root.ec.word.0
-         * @param context 继承自父级的属性上下文
-         */
         const walk = (data: any, currentPath: string, context: any) => {
             const nPath = normalizePath(currentPath);
             const isListMarker = listSet.has(nPath);
             const mappedField = mappingMap.get(nPath);
 
             let currentContext = { ...context };
-            
-            // 如果当前路径有映射，更新上下文
-            if (mappedField) {
-                currentContext[mappedField] = data;
-            }
+            if (mappedField) currentContext[mappedField] = data;
 
             if (isListMarker && data) {
-                // 如果当前节点标记为列表，进入循环分支
                 const items = Array.isArray(data) ? data : [data];
                 items.forEach((item, idx) => {
                     const subPath = Array.isArray(data) ? `${currentPath}.${idx}` : currentPath;
-                    // 进入列表后，子项产生的新上下文不应该影响同级其他列表，所以传入 copy
                     processBranch(item, subPath, { ...currentContext });
                 });
             } else if (typeof data === 'object' && data !== null) {
-                // 普通对象：先扫描所有非列表的同级映射（满足“同级分配”需求）
                 const keys = Object.keys(data);
+                // 收集同级静态字段
                 keys.forEach(k => {
                     const childPath = `${currentPath}.${k}`;
                     const childNPath = normalizePath(childPath);
-                    const childMappedField = mappingMap.get(childNPath);
-                    const childIsList = listSet.has(childNPath);
-                    
-                    // 如果子项是普通字段映射且不是列表，则它属于“公共属性”，存入当前 context
-                    if (childMappedField && !childIsList && typeof data[k] !== 'object') {
-                        currentContext[childMappedField] = data[k];
+                    const childField = mappingMap.get(childNPath);
+                    if (childField && !listSet.has(childNPath) && typeof data[k] !== 'object') {
+                        currentContext[childField] = data[k];
                     }
                 });
-
-                // 然后再递归处理所有子项（包含列表）
+                // 递归子级
                 keys.forEach(k => {
                     const childPath = `${currentPath}.${k}`;
-                    const childNPath = normalizePath(childPath);
-                    const childIsList = listSet.has(childNPath);
-                    
-                    // 如果子项是列表或对象，则递归
-                    if (childIsList || typeof data[k] === 'object') {
+                    if (listSet.has(normalizePath(childPath)) || typeof data[k] === 'object') {
                         walk(data[k], childPath, currentContext);
                     }
                 });
             }
         };
 
-        /**
-         * 处理由 List Item 产生的独立分支
-         */
         const processBranch = (data: any, currentPath: string, branchContext: any) => {
             const nPath = normalizePath(currentPath);
             const mappedField = mappingMap.get(nPath);
             if (mappedField) branchContext[mappedField] = data;
 
-            let hasDeepList = false;
             if (typeof data === 'object' && data !== null) {
-                // 探测子层级是否还有列表标记
                 const keys = Object.keys(data);
+                let hasDeepList = false;
                 
-                // 1. 先收集当前层级的所有直接映射
                 keys.forEach(k => {
-                    const childPath = `${currentPath}.${k}`;
-                    const childNPath = normalizePath(childPath);
-                    const f = mappingMap.get(childNPath);
-                    if (f && !listSet.has(childNPath)) {
-                        branchContext[f] = data[k];
-                    }
+                    const cp = `${currentPath}.${k}`;
+                    const cnp = normalizePath(cp);
+                    const f = mappingMap.get(cnp);
+                    if (f && !listSet.has(cnp)) branchContext[f] = data[k];
+                    if (listSet.has(cnp)) hasDeepList = true;
                 });
 
-                // 2. 检查是否有更深层的列表
-                for (const k of keys) {
-                    const childPath = `${currentPath}.${k}`;
-                    if (listSet.has(normalizePath(childPath))) {
-                        hasDeepList = true;
-                        break;
-                    }
-                }
-
                 if (hasDeepList) {
-                    // 如果有深层列表，继续 walk（这会产生笛卡尔积/双重循环）
                     walk(data, currentPath, branchContext);
                 } else {
-                    // 没有更深层列表了，说明当前 branchContext 已经是一个完整的条目
-                    // 深度遍历当前 data，收集所有遗漏的映射值
                     const collect = (d: any, p: string) => {
                         if (typeof d === 'object' && d !== null) {
                             Object.entries(d).forEach(([k, v]) => {
-                                const subP = `${p}.${k}`;
-                                const f = mappingMap.get(normalizePath(subP));
+                                const sp = `${p}.${k}`;
+                                const f = mappingMap.get(normalizePath(sp));
                                 if (f) branchContext[f] = v;
-                                collect(v, subP);
+                                collect(v, sp);
                             });
                         }
                     };
@@ -306,24 +268,19 @@ export const BatchDataGenerator: React.FC = () => {
         };
 
         const pushResult = (entry: any) => {
-            // 自动补全单词：如果用户没映射 text，自动用测试单词填充
-            if (!entry.text && testWord) {
-                entry.text = testWord;
-            }
-            // 只要有除 text 以外的映射数据，就认为是有效条目
+            if (!entry.text && testWord) entry.text = testWord;
             if (Object.keys(entry).length > 1 || (entry.text && Object.keys(entry).length > 0)) {
                 results.push(entry);
             }
         };
 
-        // 从根节点开始
         walk(jsonData, 'root', {});
 
         if (results.length === 0) {
-            showToast('生成失败：未匹配到任何有效数据。请检查列表标记是否正确。', 'error');
+            showToast('生成失败：请确保至少标记了一个列表项和一些字段。', 'error');
         } else {
             setPreviewResult(results);
-            showToast(`成功生成 ${results.length} 条数据`, 'success');
+            showToast(`生成成功，共计 ${results.length} 条数据`, 'success');
         }
     };
 
@@ -333,116 +290,107 @@ export const BatchDataGenerator: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `batch_generated_${testWord}_${Date.now()}.json`;
+        a.download = `reword_batch_${testWord}_${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+        <div className="fixed inset-0 bg-slate-50 flex flex-col overflow-hidden font-sans">
+            <header className="bg-white border-b border-slate-200 px-8 h-20 flex items-center justify-between shrink-0 shadow-sm z-50">
                 <Logo />
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-                        <div className="flex items-center px-4 py-1.5 gap-3 border-r border-slate-200">
+                    <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                        <div className="flex items-center px-4 py-2 gap-3 border-r border-slate-200">
                             <MapPin className="w-4 h-4 text-blue-500" />
                             <input 
                                 value={apiUrl} 
                                 onChange={e => setApiUrl(e.target.value)}
                                 className="bg-transparent border-none outline-none text-sm w-96 font-mono font-medium text-slate-700"
-                                placeholder="API URL 模板..."
+                                placeholder="API URL..."
                             />
                         </div>
-                        <div className="flex items-center px-4 py-1.5 gap-3">
+                        <div className="flex items-center px-4 py-2 gap-3">
                             <Code className="w-4 h-4 text-purple-500" />
                             <input 
                                 value={testWord} 
                                 onChange={e => setTestWord(e.target.value)}
-                                className="bg-transparent border-none outline-none text-sm w-28 font-black text-slate-800"
-                                placeholder="测试单词"
+                                className="bg-transparent border-none outline-none text-sm w-24 font-black text-slate-800"
+                                placeholder="Word"
                             />
                         </div>
                         <button 
                             onClick={fetchData} 
                             disabled={isFetching}
-                            className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md shadow-blue-200 flex items-center gap-2 active:scale-95"
+                            className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all shadow-md active:scale-95 flex items-center gap-2"
                         >
                             {isFetching ? <Send className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                            请求并解析
+                            解析数据
                         </button>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-8 grid grid-cols-1 lg:grid-cols-2 gap-8 overflow-hidden max-h-[calc(100vh-80px)]">
+            <main className="flex-1 flex gap-8 p-8 overflow-hidden h-[calc(100vh-80px)]">
                 {/* JSON Tree Column */}
-                <div className="flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                    <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex-1 flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-w-0">
+                    <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-100 rounded-xl text-blue-600">
                                 <Database className="w-5 h-5" />
                             </div>
                             <div>
-                                <h3 className="font-black text-slate-800">数据结构可视化</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">JSON Tree Mapping</p>
-                            </div>
-                        </div>
-                        <div className="flex gap-4">
-                            <div className="text-[10px] font-bold text-slate-500 flex items-center gap-2 bg-purple-50 px-2 py-1 rounded-md border border-purple-100">
-                                <span className="w-2 h-2 rounded-full bg-purple-500 shadow-sm"></span> 列表节点
-                            </div>
-                            <div className="text-[10px] font-bold text-slate-500 flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
-                                <span className="w-2 h-2 rounded-full bg-blue-500 shadow-sm"></span> 字段映射
+                                <h3 className="font-black text-slate-800">数据结构</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Select List & Map Fields</p>
                             </div>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-auto p-6 custom-scrollbar bg-white">
+                    
+                    <div className="flex-1 overflow-auto p-6 custom-scrollbar scroll-smooth min-h-0 bg-white">
                         {jsonData ? (
-                            <div className="space-y-1">
+                            <div className="space-y-0.5">
                                 {renderNode('ROOT', jsonData, 'root', 0)}
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300">
-                                <div className="p-6 bg-slate-50 rounded-full mb-4">
-                                    <AlertCircle className="w-12 h-12 opacity-20" />
-                                </div>
+                                <AlertCircle className="w-12 h-12 opacity-10 mb-4" />
                                 <p className="font-bold">等待数据输入...</p>
-                                <p className="text-xs mt-1">请输入 API 路径并点击右上方请求按钮</p>
                             </div>
                         )}
                     </div>
-                    <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+
+                    <div className="p-6 border-t border-slate-100 bg-slate-50 shrink-0 flex justify-between items-center">
                          <div className="flex gap-8">
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">循环层级</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase">循环层级</span>
                                 <span className="text-xl font-black text-purple-600 leading-none mt-1">{lists.length}</span>
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">生效映射</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase">已映射</span>
                                 <span className="text-xl font-black text-blue-600 leading-none mt-1">{mappings.length}</span>
                             </div>
                          </div>
                          <button 
                             onClick={generateEntries}
                             disabled={!jsonData || (mappings.length === 0 && lists.length === 0)}
-                            className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black hover:bg-black transition-all shadow-xl shadow-slate-200 flex items-center gap-3 disabled:opacity-30 active:scale-95"
+                            className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black hover:bg-black transition-all shadow-xl disabled:opacity-30 active:scale-95 flex items-center gap-3"
                          >
                              <Play className="w-5 h-5 fill-current" />
-                             执行数据提取
+                             开始生成预览
                          </button>
                     </div>
                 </div>
 
                 {/* Preview Column */}
-                <div className="flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                    <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex-1 flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-w-0">
+                    <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-purple-100 rounded-xl text-purple-600">
+                            <div className="p-2 bg-emerald-100 rounded-xl text-emerald-600">
                                 <Code className="w-5 h-5" />
                             </div>
                             <div>
-                                <h3 className="font-black text-slate-800">提取结果预览</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Generated Entries Preview</p>
+                                <h3 className="font-black text-slate-800">生成结果预览</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">JSON Output Preview</p>
                             </div>
                         </div>
                         {previewResult && (
@@ -451,20 +399,19 @@ export const BatchDataGenerator: React.FC = () => {
                                 className="text-xs font-black text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-xl border border-blue-200 transition-all flex items-center gap-2 active:scale-95 shadow-sm"
                             >
                                 <Download className="w-4 h-4" />
-                                导出 JSON 条目
+                                导出结果
                             </button>
                         )}
                     </div>
-                    <div className="flex-1 bg-slate-950 overflow-auto p-8 font-mono text-sm leading-relaxed custom-scrollbar selection:bg-purple-500/30">
+                    <div className="flex-1 bg-slate-950 overflow-auto p-8 font-mono text-sm leading-relaxed custom-scrollbar min-h-0">
                         {previewResult ? (
-                            <pre className="text-emerald-400 drop-shadow-sm">
+                            <pre className="text-emerald-400 selection:bg-emerald-500/30">
                                 {JSON.stringify(previewResult, null, 2)}
                             </pre>
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-700">
-                                <Code className="w-16 h-16 mb-4 opacity-10" />
-                                <p className="font-bold">生成的数据将在此展示</p>
-                                <p className="text-[10px] mt-1 opacity-50 uppercase tracking-widest">Waiting for extraction...</p>
+                            <div className="h-full flex flex-col items-center justify-center text-slate-800">
+                                <Code className="w-16 h-16 mb-4 opacity-5" />
+                                <p className="font-bold opacity-30">生成的数据将在此展示</p>
                             </div>
                         )}
                     </div>

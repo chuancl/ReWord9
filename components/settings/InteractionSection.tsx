@@ -118,7 +118,8 @@ export const InteractionSection: React.FC<InteractionSectionProps> = ({ config, 
                   if (!isMounted || !isPreviewVisible) break;
                   // 核心：使用 playWordAudio 替代简单的 TTS
                   await playWordAudio("ephemeral", config.autoPronounceAccent);
-                  if (i < config.autoPronounceCount - 1 && isMounted && isVisible) {
+                  /* 修复: isVisible 改为 isPreviewVisible */
+                  if (i < config.autoPronounceCount - 1 && isMounted && isPreviewVisible) {
                     await new Promise(r => setTimeout(r, 300));
                   }
               }

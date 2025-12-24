@@ -216,7 +216,8 @@ export const PageWidgetSection: React.FC<PageWidgetSectionProps> = ({ widget, se
                                       <p className="text-sm text-slate-700 leading-relaxed pl-2">时尚本质上是 ephemeral (短暂) 的。</p>
                                    </div>
                                 );
-                                if (item.id === 'dictionary') return (
+                                /* 修复: item.id 为 dictExample，非 dictionary */
+                                if (item.id === 'dictExample') return (
                                    <div key="dict" className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 relative">
                                       <div className="absolute left-0 top-3 w-1 h-8 bg-emerald-500 rounded-r"></div>
                                       <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 pl-2">词典例句 (Dictionary)</span>
