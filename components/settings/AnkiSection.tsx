@@ -145,19 +145,18 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
                   const fields = ["Word", "Translation", "PhoneticUs", "PhoneticUk", "POS", "DefinitionEN", "Context", "ContextTrans", "DictExample", "DictExampleTrans", "Inflections", "Tags", "Importance", "CocaRank", "SourceUrl"];
                   
                   const cardFront = `
-                    <div class="word">{{Word}}</div>
-                    <div style="display:flex; gap: 15px; margin-bottom: 15px; font-family: monospace; color: #64748b;">
+                    <div style="font-size: 28px; font-weight: bold; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">{{Word}}</div>
+                    <div style="display:flex; gap: 12px; margin-bottom: 12px; font-family: monospace; color: #64748b; font-size: 14px;">
                         <span><b>US:</b> {{PhoneticUs}}</span>
                         <span><b>UK:</b> {{PhoneticUk}}</span>
                     </div>
-                    <div style="background: #f8fafc; border-radius: 8px; padding: 15px; border: 1px solid #e2e8f0;">
-                        <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;"><span style="font-style: italic; color: #94a3b8; margin-right: 8px;">{{POS}}</span> {{Translation}}</div>
-                        <div style="font-size: 0.9em; color: #475569; margin-bottom: 10px;">{{DefinitionEN}}</div>
-                        <div class="field-label">Context</div>
-                        <div style="font-style: italic; color: #64748b;">{{Context}}</div>
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 12px; border: 1px solid #e2e8f0; text-align: left;">
+                        <div style="font-weight: bold; color: #2563eb; margin-bottom: 4px;"><span style="font-style: italic; color: #94a3b8; margin-right: 6px;">{{POS}}</span> {{Translation}}</div>
+                        <div style="font-size: 13px; color: #475569; margin-bottom: 8px;">{{DefinitionEN}}</div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Context</div>
+                        <div style="font-style: italic; color: #64748b; font-size: 13px;">{{Context}}</div>
                     </div>
-                    <div class="field-label">Metadata</div>
-                    <div style="font-size: 12px; color: #94a3b8;">Tags: {{Tags}} | Stars: {{Importance}} | COCA: {{CocaRank}}</div>
+                    <div style="margin-top: 12px; font-size: 11px; color: #cbd5e1; text-align: right;">Tags: {{Tags}} | Stars: {{Importance}} | COCA: {{CocaRank}}</div>
                   `;
                   
                   await createModel(REWORD_MODEL_NAME, config.url, fields, cardFront, "<div style='text-align:center; padding: 20px; color: #94a3b8;'>Data maintained by ReWord Extension</div>");
@@ -402,8 +401,8 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
                <div className="lg:col-span-7 bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col gap-4">
                    <div className="flex items-center"><h3 className="font-bold text-slate-800 text-sm flex items-center mr-2"><Layers className="w-4 h-4 mr-2 text-blue-600" />新增牌组 (Export)</h3><Tooltip text="将单词分别导出到 Anki。两个牌组名称不可相同。连续点击输入框 6 次可解锁编辑。"><Info className="w-4 h-4 text-slate-400 hover:text-blue-600 cursor-help transition-colors" /></Tooltip></div>
                    <div className="flex items-end gap-3">
-                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（想学习）</label><div className="relative"><input type="text" value={config.deckNameWant} readOnly={!isWantUnlocked} onClick={handleWantInputClick} onChange={e => setConfig({...config, deckNameWant: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isWantUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Want"/>{!isWantUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" {isWantUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
-                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（正在学）</label><div className="relative"><input type="text" value={config.deckNameLearning} readOnly={!isLearningUnlocked} onClick={handleLearningInputClick} onChange={e => setConfig({...config, deckNameLearning: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isLearningUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Learning"/>{!isLearningUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" {isLearningUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
+                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（想学习）</label><div className="relative"><input type="text" value={config.deckNameWant} readOnly={!isWantUnlocked} onClick={handleWantInputClick} onChange={e => setConfig({...config, deckNameWant: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isWantUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Want"/>{!isWantUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />}{isWantUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
+                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（正在学）</label><div className="relative"><input type="text" value={config.deckNameLearning} readOnly={!isLearningUnlocked} onClick={handleLearningInputClick} onChange={e => setConfig({...config, deckNameLearning: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isLearningUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Learning"/>{!isLearningUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />}{isLearningUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
                        <button onClick={handleAddCards} disabled={syncStatus === 'processing'} className={getButtonClass(syncStatus, "h-[38px]")}>{syncStatus === 'processing' ? <RefreshCw className="w-4 h-4 animate-spin mr-2"/> : <PlusCircle className="w-4 h-4 mr-2"/>} 新增</button>
                    </div>
                </div>
