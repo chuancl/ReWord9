@@ -14,7 +14,7 @@ import { WordCategory, WordEntry } from '../types';
 import { entriesStorage } from '../utils/storage';
 import { storage } from 'wxt/storage';
 
-// 映射可用字段 - 最终增强版
+// 映射可用字段 - 最终全量版
 const MAPPING_FIELDS = [
     { id: 'text', label: '单词拼写 (text)' },
     { id: 'translation', label: '中文释义 (translation)' },
@@ -36,7 +36,7 @@ const MAPPING_FIELDS = [
     { id: 'cocaRank', label: 'COCA排名 (cocaRank)', type: 'number' },
     { id: 'image', label: '图片 URL (image)' },
     { id: 'sourceUrl', label: '来源/维基地址 (sourceUrl)' },
-    // 视频分项映射，生成时自动合并为 WordEntry 要求的 video 对象结构
+    // 视频分项映射
     { id: 'videoUrl', label: '视频-播放地址 (video.url)' },
     { id: 'videoTitle', label: '视频-标题 (video.title)' },
     { id: 'videoCover', label: '视频-封面 (video.cover)' }
@@ -65,6 +65,7 @@ interface HistoryStep {
 }
 
 const RULES_STORAGE_KEY = 'local:batch-generator-rules';
+const MAX_TRAVERSAL_DEPTH = 50; // 安全深度限制
 
 export const BatchDataGenerator: React.FC = () => {
     const [apiUrl, setApiUrl] = useState('https://dict.youdao.com/jsonapi?q={word}');
@@ -97,7 +98,7 @@ export const BatchDataGenerator: React.FC = () => {
             setMappings(rule.mappings || []);
             setLists(rule.lists || []);
             saveHistory(rule.mappings || [], rule.lists || [], false);
-            showToast(`已载入 API 历史配置`, 'info');
+            showToast(`已自动载入映射规则`, 'info');
         } else {
             setMappings([]);
             setLists([]);
@@ -163,7 +164,7 @@ export const BatchDataGenerator: React.FC = () => {
         setMappings([]);
         setLists([]);
         saveHistory([], []);
-        showToast('配置已清空', 'info');
+        showToast('已清空规则配置', 'info');
     };
 
     const normalizePath = (path: string) => path.replace(/\.\d+/g, '');
@@ -176,7 +177,7 @@ export const BatchDataGenerator: React.FC = () => {
             const response = await fetch(url);
             const data = await response.json();
             setJsonData(data);
-            showToast(`已获取并解析数据结构`, 'success');
+            showToast(`已成功解析数据结构`, 'success');
         } catch (e: any) {
             showToast(`请求失败: ${e.message}`, 'error');
         } finally {
@@ -206,10 +207,10 @@ export const BatchDataGenerator: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `reword_rules_${Date.now()}.json`;
+        a.download = `reword_generator_rules_${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('规则库已导出', 'success');
+        showToast('映射规则已导出', 'success');
     };
 
     const handleImportRules = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,10 +223,10 @@ export const BatchDataGenerator: React.FC = () => {
                 const current = await storage.getItem<Record<string, RuleSet>>(RULES_STORAGE_KEY) || {};
                 const merged = { ...current, ...imported };
                 await storage.setItem(RULES_STORAGE_KEY, merged);
-                showToast(`成功导入 ${Object.keys(imported).length} 套 API 映射规则`, 'success');
+                showToast(`导入成功`, 'success');
                 loadRulesForApi(apiUrl);
             } catch (err) {
-                showToast('导入失败', 'error');
+                showToast('导入规则失败，请检查格式', 'error');
             }
         };
         reader.readAsText(file);
@@ -312,7 +313,7 @@ export const BatchDataGenerator: React.FC = () => {
                             </select>
                             
                             {mapping && (
-                                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-lg h-7 px-1.5 ml-1" title="映射优先级 (1最高)">
+                                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-lg h-7 px-1.5 ml-1" title="映射优先级">
                                     <Scale className="w-3 h-3 text-blue-400" />
                                     <select 
                                         value={mapping.weight} 
@@ -336,17 +337,17 @@ export const BatchDataGenerator: React.FC = () => {
     };
 
     /**
-     * 执行全量或单词预览生成
+     * 重构后的生成逻辑：单次遍历 + 显式状态传递，彻底消除互递归。
      */
     const runGeneration = async (isFull: boolean) => {
         const words = isFull ? importedWords : importedWords.slice(0, 1);
         if (words.length === 0) {
-            showToast('请先导入 TXT 单词列表', 'warning');
+            showToast('请先导入 TXT 单词库', 'warning');
             return;
         }
 
         setIsGenerating(true);
-        const allResults: any[] = [];
+        const allFinalResults: any[] = [];
         const mappingConfigs = mappings;
         const listSet = new Set(lists.map(l => l.path));
 
@@ -355,9 +356,10 @@ export const BatchDataGenerator: React.FC = () => {
                 const url = apiUrl.replace('{word}', encodeURIComponent(word));
                 const res = await fetch(url);
                 const data = await res.json();
-                const resultsForThisWord: any[] = [];
+                const wordResults: any[] = [];
 
-                const resolveEntry = (candidates: Map<string, Array<{value: any, weight: number}>>) => {
+                // 解析单个词条实体的逻辑
+                const finalizeEntry = (candidates: Map<string, Array<{value: any, weight: number}>>) => {
                     const finalEntry: any = { text: word };
                     candidates.forEach((vals, field) => {
                         const sorted = vals.sort((a, b) => a.weight - b.weight);
@@ -369,7 +371,7 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
                     
-                    // 1. 数组型字段归一化处理
+                    // 数据清洗与格式化
                     ['inflections', 'tags'].forEach(field => {
                         if (finalEntry[field] && typeof finalEntry[field] === 'string') {
                             finalEntry[field] = finalEntry[field].split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean);
@@ -378,113 +380,121 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
 
-                    // 2. 辅学字段始终保持数组结构
                     ['phrases', 'roots', 'synonyms'].forEach(field => {
                         if (finalEntry[field] && !Array.isArray(finalEntry[field])) {
-                            finalEntry[field] = [finalEntry[field]];
+                             finalEntry[field] = [finalEntry[field]];
                         }
                     });
 
-                    // 3. 视频对象重构 (videoUrl, videoTitle, videoCover -> video object)
+                    // 视频对象重构
                     if (finalEntry.videoUrl) {
                         finalEntry.video = {
                             url: finalEntry.videoUrl,
-                            title: finalEntry.videoTitle || '单词讲解视频',
+                            title: finalEntry.videoTitle || '讲解视频',
                             cover: finalEntry.videoCover || ''
                         };
-                        delete finalEntry.videoUrl;
-                        delete finalEntry.videoTitle;
-                        delete finalEntry.videoCover;
+                        delete finalEntry.videoUrl; delete finalEntry.videoTitle; delete finalEntry.videoCover;
                     }
 
                     if (Object.keys(finalEntry).length > 1) {
-                        resultsForThisWord.push(finalEntry);
+                        wordResults.push(finalEntry);
                     }
                 };
 
-                const walk = (d: any, currentPath: string, parentCandidates: Map<string, Array<{value: any, weight: number}>>) => {
-                    const nPath = normalizePath(currentPath);
-                    const isListMarker = listSet.has(nPath);
+                /**
+                 * 安全遍历函数
+                 * @param d 当前数据节点
+                 * @param currentPath 当前规范路径
+                 * @param currentCandidates 继承自父级的候选映射
+                 * @param depth 递归深度计数器
+                 */
+                const traverseSafe = (d: any, currentPath: string, currentCandidates: Map<string, Array<{value: any, weight: number}>>, depth: number) => {
+                    if (depth > MAX_TRAVERSAL_DEPTH) return;
                     
+                    const nPath = normalizePath(currentPath);
+                    const isList = listSet.has(nPath);
+                    
+                    // 收集当前路径的映射
                     const matches = mappingConfigs.filter(m => m.path === nPath);
                     matches.forEach(m => {
-                        const existing = parentCandidates.get(m.field) || [];
-                        parentCandidates.set(m.field, [...existing, { value: d, weight: m.weight }]);
+                        const existing = currentCandidates.get(m.field) || [];
+                        currentCandidates.set(m.field, [...existing, { value: d, weight: m.weight }]);
                     });
 
-                    if (isListMarker && d) {
+                    if (isList && d) {
+                        // 如果命中 LIST 标记，分支处理
                         const items = Array.isArray(d) ? d : [d];
                         items.forEach((item, idx) => {
-                            const subPath = Array.isArray(d) ? `${currentPath}.${idx}` : currentPath;
+                            // 为列表项创建独立的候选池
                             const branchCandidates = new Map();
-                            parentCandidates.forEach((v, k) => branchCandidates.set(k, [...v]));
-                            processBranch(item, subPath, branchCandidates);
+                            currentCandidates.forEach((v, k) => branchCandidates.set(k, [...v]));
+                            
+                            const subPath = Array.isArray(d) ? `${currentPath}.${idx}` : currentPath;
+                            
+                            // 在分支内继续深度搜索
+                            if (typeof item === 'object' && item !== null) {
+                                // 继续向下收集，直到没有更多子列表或深度耗尽
+                                const innerCollect = (innerD: any, innerP: string, innerDepth: number) => {
+                                    if (innerDepth > MAX_TRAVERSAL_DEPTH) return;
+                                    const innerNPath = normalizePath(innerP);
+                                    
+                                    // 分支内部如果有嵌套列表，需要特殊处理（通常我们只处理一层扁平化列表）
+                                    if (listSet.has(innerNPath) && innerDepth > depth) {
+                                         // 嵌套列表由外层遍历逻辑触发，此处仅收集非列表字段
+                                    }
+
+                                    const innerMatches = mappingConfigs.filter(m => m.path === innerNPath);
+                                    innerMatches.forEach(m => {
+                                        const existing = branchCandidates.get(m.field) || [];
+                                        branchCandidates.set(m.field, [...existing, { value: innerD, weight: m.weight }]);
+                                    });
+
+                                    if (typeof innerD === 'object' && innerD !== null) {
+                                        Object.keys(innerD).forEach(k => innerCollect(innerD[k], `${innerP}.${k}`, innerDepth + 1));
+                                    }
+                                };
+                                innerCollect(item, subPath, depth + 1);
+                            }
+                            finalizeEntry(branchCandidates);
                         });
                     } else if (typeof d === 'object' && d !== null) {
+                        // 普通对象深度优先搜索
                         Object.keys(d).forEach(k => {
-                            const childPath = `${currentPath}.${k}`;
-                            walk(d[k], childPath, parentCandidates);
+                            traverseSafe(d[k], `${currentPath}.${k}`, currentCandidates, depth + 1);
                         });
                     }
                 };
 
-                const processBranch = (d: any, currentPath: string, branchCandidates: Map<string, Array<{value: any, weight: number}>>) => {
-                    const nPath = normalizePath(currentPath);
-                    const matches = mappingConfigs.filter(m => m.path === nPath);
-                    matches.forEach(m => {
-                        const existing = branchCandidates.get(m.field) || [];
-                        branchCandidates.set(m.field, [...existing, { value: d, weight: m.weight }]);
-                    });
+                // 启动引擎
+                traverseSafe(data, 'root', new Map(), 0);
 
-                    if (typeof d === 'object' && d !== null) {
-                        let hasDeepList = Object.keys(d).some(k => listSet.has(normalizePath(`${currentPath}.${k}`)));
-                        if (hasDeepList) {
-                            walk(d, currentPath, branchCandidates);
-                        } else {
-                            const collectDeep = (innerD: any, innerP: string) => {
-                                if (typeof innerD === 'object' && innerD !== null) {
-                                    Object.entries(innerD).forEach(([k, v]) => {
-                                        const sp = `${innerP}.${k}`;
-                                        const mms = mappingConfigs.filter(m => m.path === normalizePath(sp));
-                                        mms.forEach(m => {
-                                            const existing = branchCandidates.get(m.field) || [];
-                                            branchCandidates.set(m.field, [...existing, { value: v, weight: m.weight }]);
-                                        });
-                                        collectDeep(v, sp);
-                                    });
-                                }
-                            };
-                            collectDeep(d, currentPath);
-                            resolveEntry(branchCandidates);
-                        }
-                    } else {
-                        resolveEntry(branchCandidates);
-                    }
-                };
-
-                walk(data, 'root', new Map());
-                if (resultsForThisWord.length === 0 && mappings.length > 0) {
-                   const finalCandidates = new Map();
-                   const collectAll = (d: any, p: string) => {
-                        const mms = mappingConfigs.filter(m => m.path === normalizePath(p));
-                        mms.forEach(m => {
-                            const existing = finalCandidates.get(m.field) || [];
-                            finalCandidates.set(m.field, [...existing, { value: d, weight: m.weight }]);
+                // 兜底逻辑：如果完全没有 LIST 被匹配，但有字段映射，尝试产出一个单一词条
+                if (wordResults.length === 0 && mappings.length > 0) {
+                    const fallbackCandidates = new Map();
+                    const collectSimple = (d: any, p: string, depth: number) => {
+                        if (depth > MAX_TRAVERSAL_DEPTH) return;
+                        const n = normalizePath(p);
+                        const ms = mappingConfigs.filter(m => m.path === n);
+                        ms.forEach(m => {
+                            const ex = fallbackCandidates.get(m.field) || [];
+                            fallbackCandidates.set(m.field, [...ex, { value: d, weight: m.weight }]);
                         });
                         if (typeof d === 'object' && d !== null) {
-                            Object.entries(d).forEach(([k, v]) => collectAll(v, `${p}.${k}`));
+                            Object.entries(d).forEach(([k, v]) => collectSimple(v, `${p}.${k}`, depth + 1));
                         }
-                   };
-                   collectAll(data, 'root');
-                   resolveEntry(finalCandidates);
+                    };
+                    collectSimple(data, 'root', 0);
+                    finalizeEntry(fallbackCandidates);
                 }
                 
-                allResults.push(...resultsForThisWord);
+                allFinalResults.push(...wordResults);
             }
-            setPreviewResult(allResults);
-            setSelectedPreviewIds(new Set(allResults.map((_, i) => i)));
-            showToast(isFull ? `全量处理完成: 共匹配 ${allResults.length} 条数据` : '单词预览解析成功', 'success');
+
+            setPreviewResult(allFinalResults);
+            setSelectedPreviewIds(new Set(allFinalResults.map((_, i) => i)));
+            showToast(isFull ? `全量生成完成：匹配 ${allFinalResults.length} 条数据` : '预览生成成功', 'success');
         } catch (e: any) {
+            console.error("Generator Error", e);
             showToast(`生成失败: ${e.message}`, 'error');
         } finally {
             setIsGenerating(false);
@@ -502,7 +512,7 @@ export const BatchDataGenerator: React.FC = () => {
             inflections: item.inflections || [], tags: item.tags || []
         }));
         await entriesStorage.setValue([...currentEntries, ...newEntries]);
-        showToast(`已成功导入 ${newEntries.length} 个单词至 "${category}"`, 'success');
+        showToast(`已成功导入 ${newEntries.length} 个词条至 "${category}"`, 'success');
         setPreviewResult(previewResult.filter((_, idx) => !selectedPreviewIds.has(idx)));
         setSelectedPreviewIds(new Set());
     };
@@ -518,7 +528,7 @@ export const BatchDataGenerator: React.FC = () => {
                             <input 
                                 value={apiUrl} onChange={e => setApiUrl(e.target.value)}
                                 className="bg-transparent border-none outline-none text-xs w-96 font-mono text-slate-700"
-                                placeholder="输入 API 地址 (例如有道 API)..."
+                                placeholder="输入 API 地址 (例如有道词典 API)..."
                             />
                         </div>
                     </div>
@@ -527,7 +537,7 @@ export const BatchDataGenerator: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                         <button onClick={handleExportRules} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition" title="导出规则库"><DownloadCloud className="w-5 h-5"/></button>
-                        <button onClick={() => ruleImportRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition" title="导入规则文件"><UploadCloud className="w-5 h-5"/></button>
+                        <button onClick={() => ruleImportRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition" title="导入规则库"><UploadCloud className="w-5 h-5"/></button>
                         <input type="file" ref={ruleImportRef} className="hidden" accept=".json" onChange={handleImportRules} />
                     </div>
 
@@ -545,13 +555,13 @@ export const BatchDataGenerator: React.FC = () => {
             </header>
 
             <main className="flex-1 flex gap-6 p-6 overflow-hidden">
-                {/* 左侧：规则映射配置 */}
+                {/* 左侧：路径解析 */}
                 <div className="w-[48%] flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2">
                             <Database className="w-5 h-5 text-blue-600" />
-                            <h3 className="font-black text-slate-800 text-sm">解析映射配置</h3>
-                            <span className="text-[10px] text-slate-400 font-bold bg-white px-2 py-0.5 rounded border border-slate-200 ml-2">自动保存</span>
+                            <h3 className="font-black text-slate-800 text-sm">解析规则配置</h3>
+                            <span className="text-[10px] text-slate-400 font-bold bg-white px-2 py-0.5 rounded border border-slate-200 ml-2">持久化保存</span>
                         </div>
                         <div className="flex gap-1">
                             <button onClick={undo} disabled={historyIndex <= 0} className="p-2 hover:bg-white rounded-lg disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button>
@@ -565,7 +575,7 @@ export const BatchDataGenerator: React.FC = () => {
                         {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center">
                                 <FileUp className="w-12 h-12 opacity-10 mb-4" />
-                                <p>导入 TXT 单词列表后显示 API 数据结构。<br/>所有规则映射将按 API 地址自动持久化保存。</p>
+                                <p>导入 TXT 单词列表后展示 API 数据结构。所有规则配置将自动云端同步。</p>
                             </div>
                         )}
                     </div>
@@ -581,7 +591,7 @@ export const BatchDataGenerator: React.FC = () => {
                                 disabled={!jsonData || isGenerating || (mappings.length === 0)}
                                 className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-2xl font-bold hover:bg-slate-50 transition-all disabled:opacity-30 flex items-center gap-2 active:scale-95"
                             >
-                                <Eye className="w-4 h-4" /> 单词预览
+                                <Eye className="w-4 h-4" /> 解析预览
                             </button>
                             <button 
                                 onClick={() => runGeneration(true)}
