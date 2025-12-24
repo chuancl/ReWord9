@@ -47,18 +47,13 @@ export const createModel = async (
     return invokeAnki('createModel', {
         modelName,
         inOrderFields: fields,
-        css: `.card {
- font-family: arial;
- font-size: 20px;
- text-align: center;
- color: black;
- background-color: white;
-}
-img { max-width: 100%; }
-`,
+        css: `.card { font-family: arial; font-size: 20px; text-align: left; color: #334155; background-color: white; padding: 20px; }
+              .word { font-size: 32px; font-weight: bold; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px; }
+              .field-label { font-size: 12px; color: #94a3b8; font-weight: bold; text-transform: uppercase; margin-top: 10px; }
+              .field-value { margin-bottom: 5px; }`,
         cardTemplates: [
             {
-                Name: "ReWord Template Card",
+                Name: "ReWord Sync Card",
                 Front: frontTemplate,
                 Back: backTemplate
             }
@@ -74,8 +69,8 @@ export const addNotesToAnki = async (notes: any[], baseUrl: string) => {
     return invokeAnki<(number | null)[]>('addNotes', { notes }, baseUrl);
 };
 
-export const findNotesInDeck = async (deckName: string, baseUrl: string) => {
-    return invokeAnki<number[]>('findNotes', { query: `deck:"${deckName}"` }, baseUrl);
+export const findNotes = async (query: string, baseUrl: string) => {
+    return invokeAnki<number[]>('findNotes', { query }, baseUrl);
 };
 
 export const getNotesInfo = async (noteIds: number[], baseUrl: string) => {

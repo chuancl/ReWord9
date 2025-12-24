@@ -1,10 +1,12 @@
+
 import React, { useState, useMemo } from 'react';
 import { AnkiConfig, WordEntry, WordCategory } from '../../types';
 import { RefreshCw, Wifi, Info, PlusCircle, Layers, Calendar, Code, Eye, BookOpen, X, Copy, Lock, Unlock, AlertCircle, Download } from 'lucide-react';
-import { pingAnki, addNotesToAnki, getCardsInfo, getModelNames, createModel, createDeck, getDeckNames, canAddNotes, getNotesInfo, invokeAnki } from '../../utils/anki-client';
+import { pingAnki, addNotesToAnki, getCardsInfo, getModelNames, createModel, createDeck, getDeckNames, canAddNotes, getNotesInfo, invokeAnki, findNotes } from '../../utils/anki-client';
 import { Toast, ToastMessage } from '../ui/Toast';
 import { SyncStatusModal } from './SyncStatusModal';
 
+// Anki 专用配置常量
 const REWORD_PARENT_DECK = "ReWord词库";
 const REWORD_MODEL_NAME = "ReWord专用模板";
 const DECK_MAP = {
@@ -36,7 +38,7 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
   const [activeTemplate, setActiveTemplate] = useState<'front' | 'back'>('front');
   const [showVarHelp, setShowVarHelp] = useState(false);
   
-  // Status States
+  // 状态管理
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'fail'>('idle');
   const [importStatus, setImportStatus] = useState<'idle' | 'processing' | 'success' | 'fail'>('idle');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'processing' | 'success' | 'fail'>('idle');
@@ -52,7 +54,7 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
   const isWantUnlocked = wantUnlockCount >= 6;
   const isLearningUnlocked = learningUnlockCount >= 6;
 
-  // --- Fix: 添加缺失的预览数据 ---
+  // 预览数据
   const previewEntry: WordEntry = useMemo(() => ({
     id: 'preview-123',
     text: 'serendipity',
@@ -75,7 +77,6 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
     scenarioId: '1'
   }), []);
 
-  // --- Fix: 添加变量复制代码逻辑 ---
   const handleCopyVar = (code: string) => {
     navigator.clipboard.writeText(code);
     showToast(`已复制变量 ${code}`, 'success');
@@ -111,21 +112,21 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
   };
 
   /**
-   * 核心：从 Anki 导入单词
+   * 核心逻辑：从 Anki 导入数据
    */
   const handleImportFromAnki = async () => {
       setImportStatus('processing');
       try {
-          // 1. 连通性预检
+          // 1. 连通性测试
           await pingAnki(config.url);
 
-          // 2. 检查牌组是否存在
+          // 2. 牌组检查与创建
           const existingDecks = await getDeckNames(config.url);
           const requiredDecks = Object.keys(DECK_MAP);
           const missingDecks = requiredDecks.filter(d => !existingDecks.includes(d));
 
           if (missingDecks.length > 0) {
-              if (confirm(`Anki 中缺少 ReWord 专用牌组结构。是否立即创建？\n\n将创建：\n- ${REWORD_PARENT_DECK}\n- 以及 3 个子牌组`)) {
+              if (confirm(`Anki 中缺少 ReWord 专用牌组结构。是否立即创建？\n\n将创建：\n- ${REWORD_PARENT_DECK}\n- 以及 3 个同步子牌组`)) {
                   await createDeck(REWORD_PARENT_DECK, config.url);
                   for (const d of requiredDecks) {
                       await createDeck(d, config.url);
@@ -137,28 +138,29 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
               }
           }
 
-          // 3. 检查并初始化模板 (Model)
+          // 3. 模板检查与初始化 (正面包含所有字段)
           const existingModels = await getModelNames(config.url);
           if (!existingModels.includes(REWORD_MODEL_NAME)) {
-              if (confirm(`Anki 中缺少 "${REWORD_MODEL_NAME}" 笔记类型。是否立即同步？`)) {
+              if (confirm(`Anki 中缺少 "${REWORD_MODEL_NAME}" 笔记类型。是否立即初始化？`)) {
                   const fields = ["Word", "Translation", "PhoneticUs", "PhoneticUk", "POS", "DefinitionEN", "Context", "ContextTrans", "DictExample", "DictExampleTrans", "Inflections", "Tags", "Importance", "CocaRank", "SourceUrl"];
-                  // 正面显示所有核心字段，背面简洁
+                  
                   const cardFront = `
-                    <div style="text-align:left; font-family: sans-serif; padding: 20px; color: #334155;">
-                        <div style="font-size: 32px; font-weight: 800; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 15px;">{{Word}}</div>
-                        <div style="display:flex; gap: 15px; margin-bottom: 15px; font-family: monospace; color: #64748b;">
-                            <span><b>US:</b> {{PhoneticUs}}</span>
-                            <span><b>UK:</b> {{PhoneticUk}}</span>
-                        </div>
-                        <div style="background: #f8fafc; border-radius: 8px; padding: 15px; border: 1px solid #e2e8f0;">
-                            <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;"><span style="font-style: italic; color: #94a3b8; margin-right: 8px;">{{POS}}</span> {{Translation}}</div>
-                            <div style="font-size: 0.9em; color: #475569; margin-bottom: 10px;">{{DefinitionEN}}</div>
-                            <div style="border-top: 1px dashed #cbd5e1; padding-top: 10px; font-style: italic; color: #64748b;">{{Context}}</div>
-                        </div>
-                        <div style="margin-top: 15px; font-size: 12px; color: #94a3b8;">Tags: {{Tags}} | Stars: {{Importance}}</div>
+                    <div class="word">{{Word}}</div>
+                    <div style="display:flex; gap: 15px; margin-bottom: 15px; font-family: monospace; color: #64748b;">
+                        <span><b>US:</b> {{PhoneticUs}}</span>
+                        <span><b>UK:</b> {{PhoneticUk}}</span>
                     </div>
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 15px; border: 1px solid #e2e8f0;">
+                        <div style="font-weight: bold; color: #2563eb; margin-bottom: 5px;"><span style="font-style: italic; color: #94a3b8; margin-right: 8px;">{{POS}}</span> {{Translation}}</div>
+                        <div style="font-size: 0.9em; color: #475569; margin-bottom: 10px;">{{DefinitionEN}}</div>
+                        <div class="field-label">Context</div>
+                        <div style="font-style: italic; color: #64748b;">{{Context}}</div>
+                    </div>
+                    <div class="field-label">Metadata</div>
+                    <div style="font-size: 12px; color: #94a3b8;">Tags: {{Tags}} | Stars: {{Importance}} | COCA: {{CocaRank}}</div>
                   `;
-                  await createModel(REWORD_MODEL_NAME, config.url, fields, cardFront, "<div style='text-align:center; padding: 20px; color: #94a3b8;'>Check on ReWord Extension for details</div>");
+                  
+                  await createModel(REWORD_MODEL_NAME, config.url, fields, cardFront, "<div style='text-align:center; padding: 20px; color: #94a3b8;'>Data maintained by ReWord Extension</div>");
                   showToast("专用模板初始化成功", "success");
               } else {
                   setImportStatus('idle');
@@ -166,44 +168,47 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
               }
           }
 
-          // 4. 开始抓取数据
+          // 4. 抓取数据并映射
           let totalImported = 0;
           let totalSkipped = 0;
           const newEntries: WordEntry[] = [];
 
           for (const [ankiDeck, category] of Object.entries(DECK_MAP)) {
-              const noteIds = await invokeAnki<number[]>('findNotes', { query: `deck:"${ankiDeck}"` }, config.url);
+              const noteIds = await findNotes(`deck:"${ankiDeck}"`, config.url);
               if (noteIds.length === 0) continue;
 
               const notes = await getNotesInfo(noteIds, config.url);
               notes.forEach((note: any) => {
                   const f = note.fields;
-                  const wordText = f.Word?.value?.replace(/<[^>]*>/g, '').trim();
-                  const trans = f.Translation?.value?.replace(/<[^>]*>/g, '').trim();
+                  // 简单清理 HTML 标签
+                  const clean = (val: string) => val?.replace(/<[^>]*>/g, '').trim() || "";
+                  
+                  const wordText = clean(f.Word?.value);
+                  const trans = clean(f.Translation?.value);
                   
                   if (!wordText) return;
 
-                  // 重复检查
+                  // 查重：单词+释义完全一致则跳过
                   const isDup = entries.some(e => e.text.toLowerCase() === wordText.toLowerCase() && e.translation === trans);
                   if (isDup) { totalSkipped++; return; }
 
                   const entry: WordEntry = {
-                      id: `anki-imp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                      id: `anki-sync-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                       text: wordText,
-                      translation: trans || "",
-                      phoneticUs: f.PhoneticUs?.value || "",
-                      phoneticUk: f.PhoneticUk?.value || "",
-                      partOfSpeech: f.POS?.value || "",
-                      englishDefinition: f.DefinitionEN?.value || "",
-                      contextSentence: f.Context?.value || "",
-                      contextSentenceTranslation: f.ContextTrans?.value || "",
-                      dictionaryExample: f.DictExample?.value || "",
-                      dictionaryExampleTranslation: f.DictExampleTrans?.value || "",
-                      inflections: (f.Inflections?.value || "").split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean),
-                      tags: (f.Tags?.value || "").split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean),
+                      translation: trans,
+                      phoneticUs: clean(f.PhoneticUs?.value),
+                      phoneticUk: clean(f.PhoneticUk?.value),
+                      partOfSpeech: clean(f.POS?.value),
+                      englishDefinition: clean(f.DefinitionEN?.value),
+                      contextSentence: clean(f.Context?.value),
+                      contextSentenceTranslation: clean(f.ContextTrans?.value),
+                      dictionaryExample: clean(f.DictExample?.value),
+                      dictionaryExampleTranslation: clean(f.DictExampleTrans?.value),
+                      inflections: clean(f.Inflections?.value).split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean),
+                      tags: clean(f.Tags?.value).split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean),
                       importance: parseInt(f.Importance?.value) || 0,
                       cocaRank: parseInt(f.CocaRank?.value) || 0,
-                      sourceUrl: f.SourceUrl?.value || "",
+                      sourceUrl: clean(f.SourceUrl?.value),
                       category: category as WordCategory,
                       addedAt: Date.now(),
                       scenarioId: '1'
@@ -215,9 +220,9 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
 
           if (newEntries.length > 0) {
               setEntries(prev => [...newEntries, ...prev]);
-              showToast(`同步完成：新增 ${totalImported} 个单词，跳过重复 ${totalSkipped} 个`, "success");
+              showToast(`同步完成：从 Anki 导入 ${totalImported} 个新单词 (跳过 ${totalSkipped} 个已存在项)`, "success");
           } else {
-              showToast(`Anki 牌组中没有新单词需要导入 (跳过 ${totalSkipped})`, "info");
+              showToast(`同步结束：Anki 牌组中没有新单词需要导入`, "info");
           }
           setImportStatus('success');
       } catch (e: any) {
@@ -397,8 +402,8 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
                <div className="lg:col-span-7 bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col gap-4">
                    <div className="flex items-center"><h3 className="font-bold text-slate-800 text-sm flex items-center mr-2"><Layers className="w-4 h-4 mr-2 text-blue-600" />新增牌组 (Export)</h3><Tooltip text="将单词分别导出到 Anki。两个牌组名称不可相同。连续点击输入框 6 次可解锁编辑。"><Info className="w-4 h-4 text-slate-400 hover:text-blue-600 cursor-help transition-colors" /></Tooltip></div>
                    <div className="flex items-end gap-3">
-                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（想学习）</label><div className="relative"><input type="text" value={config.deckNameWant} readOnly={!isWantUnlocked} onClick={handleWantInputClick} onChange={e => setConfig({...config, deckNameWant: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isWantUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Want"/>{!isWantUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />}{isWantUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
-                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（正在学）</label><div className="relative"><input type="text" value={config.deckNameLearning} readOnly={!isLearningUnlocked} onClick={handleLearningInputClick} onChange={e => setConfig({...config, deckNameLearning: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isLearningUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Learning"/>{!isLearningUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />}{isLearningUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
+                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（想学习）</label><div className="relative"><input type="text" value={config.deckNameWant} readOnly={!isWantUnlocked} onClick={handleWantInputClick} onChange={e => setConfig({...config, deckNameWant: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isWantUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Want"/>{!isWantUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" {isWantUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
+                       <div className="flex-1"><label className="block text-xs text-slate-500 mb-1">目标牌组（正在学）</label><div className="relative"><input type="text" value={config.deckNameLearning} readOnly={!isLearningUnlocked} onClick={handleLearningInputClick} onChange={e => setConfig({...config, deckNameLearning: e.target.value})} className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${isLearningUnlocked ? 'bg-white border-slate-300' : 'bg-slate-100 border-slate-200 text-slate-500 cursor-pointer hover:bg-slate-50'}`} placeholder="ContextLingo-Learning"/>{!isLearningUnlocked && <Lock className="w-3 h-3 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" {isLearningUnlocked && <Unlock className="w-3 h-3 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />}</div></div>
                        <button onClick={handleAddCards} disabled={syncStatus === 'processing'} className={getButtonClass(syncStatus, "h-[38px]")}>{syncStatus === 'processing' ? <RefreshCw className="w-4 h-4 animate-spin mr-2"/> : <PlusCircle className="w-4 h-4 mr-2"/>} 新增</button>
                    </div>
                </div>
