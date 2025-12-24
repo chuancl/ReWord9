@@ -14,7 +14,7 @@ import { WordCategory, WordEntry } from '../types';
 import { entriesStorage } from '../utils/storage';
 import { storage } from 'wxt/storage';
 
-// 映射可用字段 - 全量增强版
+// 映射可用字段 - 最终增强版
 const MAPPING_FIELDS = [
     { id: 'text', label: '单词拼写 (text)' },
     { id: 'translation', label: '中文释义 (translation)' },
@@ -36,10 +36,10 @@ const MAPPING_FIELDS = [
     { id: 'cocaRank', label: 'COCA排名 (cocaRank)', type: 'number' },
     { id: 'image', label: '图片 URL (image)' },
     { id: 'sourceUrl', label: '来源/维基地址 (sourceUrl)' },
-    // 视频分项映射，生成时自动合并为 video 对象结构
-    { id: 'videoUrl', label: '讲解视频-链接 (video.url)' },
-    { id: 'videoTitle', label: '讲解视频-标题 (video.title)' },
-    { id: 'videoCover', label: '讲解视频-封面 (video.cover)' }
+    // 视频分项映射，生成时自动合并为 WordEntry 要求的 video 对象结构
+    { id: 'videoUrl', label: '视频-播放地址 (video.url)' },
+    { id: 'videoTitle', label: '视频-标题 (video.title)' },
+    { id: 'videoCover', label: '视频-封面 (video.cover)' }
 ];
 
 interface MappingConfig {
@@ -97,7 +97,7 @@ export const BatchDataGenerator: React.FC = () => {
             setMappings(rule.mappings || []);
             setLists(rule.lists || []);
             saveHistory(rule.mappings || [], rule.lists || [], false);
-            showToast(`已自动载入映射规则`, 'info');
+            showToast(`已载入 API 历史配置`, 'info');
         } else {
             setMappings([]);
             setLists([]);
@@ -163,7 +163,7 @@ export const BatchDataGenerator: React.FC = () => {
         setMappings([]);
         setLists([]);
         saveHistory([], []);
-        showToast('已清空规则', 'info');
+        showToast('配置已清空', 'info');
     };
 
     const normalizePath = (path: string) => path.replace(/\.\d+/g, '');
@@ -176,9 +176,9 @@ export const BatchDataGenerator: React.FC = () => {
             const response = await fetch(url);
             const data = await response.json();
             setJsonData(data);
-            showToast(`已获取单词 "${word}" 数据结构`, 'success');
+            showToast(`已获取并解析数据结构`, 'success');
         } catch (e: any) {
-            showToast(`获取失败: ${e.message}`, 'error');
+            showToast(`请求失败: ${e.message}`, 'error');
         } finally {
             setIsFetching(false);
         }
@@ -222,7 +222,7 @@ export const BatchDataGenerator: React.FC = () => {
                 const current = await storage.getItem<Record<string, RuleSet>>(RULES_STORAGE_KEY) || {};
                 const merged = { ...current, ...imported };
                 await storage.setItem(RULES_STORAGE_KEY, merged);
-                showToast(`成功导入 ${Object.keys(imported).length} 套 API 规则`, 'success');
+                showToast(`成功导入 ${Object.keys(imported).length} 套 API 映射规则`, 'success');
                 loadRulesForApi(apiUrl);
             } catch (err) {
                 showToast('导入失败', 'error');
@@ -312,7 +312,7 @@ export const BatchDataGenerator: React.FC = () => {
                             </select>
                             
                             {mapping && (
-                                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-lg h-7 px-1.5 ml-1" title="映射优先级">
+                                <div className="flex items-center gap-1 bg-white border border-blue-200 rounded-lg h-7 px-1.5 ml-1" title="映射优先级 (1最高)">
                                     <Scale className="w-3 h-3 text-blue-400" />
                                     <select 
                                         value={mapping.weight} 
@@ -336,12 +336,12 @@ export const BatchDataGenerator: React.FC = () => {
     };
 
     /**
-     * 执行生成逻辑
+     * 执行全量或单词预览生成
      */
     const runGeneration = async (isFull: boolean) => {
         const words = isFull ? importedWords : importedWords.slice(0, 1);
         if (words.length === 0) {
-            showToast('请先导入单词库', 'warning');
+            showToast('请先导入 TXT 单词列表', 'warning');
             return;
         }
 
@@ -369,7 +369,7 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
                     
-                    // 1. 数组字段特殊处理：字符串切分为数组
+                    // 1. 数组型字段归一化处理
                     ['inflections', 'tags'].forEach(field => {
                         if (finalEntry[field] && typeof finalEntry[field] === 'string') {
                             finalEntry[field] = finalEntry[field].split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean);
@@ -378,18 +378,18 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
 
-                    // 2. 辅学字段确保为数组
+                    // 2. 辅学字段始终保持数组结构
                     ['phrases', 'roots', 'synonyms'].forEach(field => {
                         if (finalEntry[field] && !Array.isArray(finalEntry[field])) {
-                             finalEntry[field] = [finalEntry[field]];
+                            finalEntry[field] = [finalEntry[field]];
                         }
                     });
 
-                    // 3. 视频对象封装逻辑
+                    // 3. 视频对象重构 (videoUrl, videoTitle, videoCover -> video object)
                     if (finalEntry.videoUrl) {
                         finalEntry.video = {
                             url: finalEntry.videoUrl,
-                            title: finalEntry.videoTitle || '讲解视频',
+                            title: finalEntry.videoTitle || '单词讲解视频',
                             cover: finalEntry.videoCover || ''
                         };
                         delete finalEntry.videoUrl;
@@ -483,7 +483,7 @@ export const BatchDataGenerator: React.FC = () => {
             }
             setPreviewResult(allResults);
             setSelectedPreviewIds(new Set(allResults.map((_, i) => i)));
-            showToast(isFull ? `处理完成: 匹配到 ${allResults.length} 条数据` : '单词预览成功', 'success');
+            showToast(isFull ? `全量处理完成: 共匹配 ${allResults.length} 条数据` : '单词预览解析成功', 'success');
         } catch (e: any) {
             showToast(`生成失败: ${e.message}`, 'error');
         } finally {
@@ -502,7 +502,7 @@ export const BatchDataGenerator: React.FC = () => {
             inflections: item.inflections || [], tags: item.tags || []
         }));
         await entriesStorage.setValue([...currentEntries, ...newEntries]);
-        showToast(`成功导入 ${newEntries.length} 个单词至 "${category}"`, 'success');
+        showToast(`已成功导入 ${newEntries.length} 个单词至 "${category}"`, 'success');
         setPreviewResult(previewResult.filter((_, idx) => !selectedPreviewIds.has(idx)));
         setSelectedPreviewIds(new Set());
     };
@@ -518,7 +518,7 @@ export const BatchDataGenerator: React.FC = () => {
                             <input 
                                 value={apiUrl} onChange={e => setApiUrl(e.target.value)}
                                 className="bg-transparent border-none outline-none text-xs w-96 font-mono text-slate-700"
-                                placeholder="输入 API 地址..."
+                                placeholder="输入 API 地址 (例如有道 API)..."
                             />
                         </div>
                     </div>
@@ -545,12 +545,13 @@ export const BatchDataGenerator: React.FC = () => {
             </header>
 
             <main className="flex-1 flex gap-6 p-6 overflow-hidden">
-                {/* 左侧：路径解析 */}
+                {/* 左侧：规则映射配置 */}
                 <div className="w-[48%] flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-2">
                             <Database className="w-5 h-5 text-blue-600" />
-                            <h3 className="font-black text-slate-800 text-sm">解析规则配置</h3>
+                            <h3 className="font-black text-slate-800 text-sm">解析映射配置</h3>
+                            <span className="text-[10px] text-slate-400 font-bold bg-white px-2 py-0.5 rounded border border-slate-200 ml-2">自动保存</span>
                         </div>
                         <div className="flex gap-1">
                             <button onClick={undo} disabled={historyIndex <= 0} className="p-2 hover:bg-white rounded-lg disabled:opacity-30"><RotateCcw className="w-4 h-4" /></button>
@@ -564,7 +565,7 @@ export const BatchDataGenerator: React.FC = () => {
                         {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center">
                                 <FileUp className="w-12 h-12 opacity-10 mb-4" />
-                                <p>导入单词后显示结构。所有规则按 API 自动保存。</p>
+                                <p>导入 TXT 单词列表后显示 API 数据结构。<br/>所有规则映射将按 API 地址自动持久化保存。</p>
                             </div>
                         )}
                     </div>
@@ -578,7 +579,7 @@ export const BatchDataGenerator: React.FC = () => {
                             <button 
                                 onClick={() => runGeneration(false)}
                                 disabled={!jsonData || isGenerating || (mappings.length === 0)}
-                                className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-2xl font-bold hover:bg-slate-50 transition-all disabled:opacity-30 flex items-center gap-2"
+                                className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-2xl font-bold hover:bg-slate-50 transition-all disabled:opacity-30 flex items-center gap-2 active:scale-95"
                             >
                                 <Eye className="w-4 h-4" /> 单词预览
                             </button>
@@ -593,7 +594,7 @@ export const BatchDataGenerator: React.FC = () => {
                     </div>
                 </div>
 
-                {/* 右侧：预览卡片 */}
+                {/* 右侧：生成预览结果 */}
                 <div className="flex-1 flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <div className="flex items-center gap-4">
@@ -654,7 +655,7 @@ export const BatchDataGenerator: React.FC = () => {
                                                     <div className="space-y-3">
                                                         {item.mixedSentence && (
                                                             <div className="bg-purple-50 p-2.5 rounded-xl border border-purple-100">
-                                                                <span className="text-[9px] font-black text-purple-400 uppercase block mb-1">混合例句</span>
+                                                                <span className="text-[9px] font-black text-purple-400 uppercase block mb-1">中英混合例句</span>
                                                                 <p className="text-xs text-purple-900 leading-relaxed">{item.mixedSentence}</p>
                                                             </div>
                                                         )}
@@ -666,9 +667,9 @@ export const BatchDataGenerator: React.FC = () => {
                                                         )}
                                                         
                                                         <div className="flex gap-2">
-                                                            {item.image && <div className="flex items-center gap-1 text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"><ImageIcon className="w-3 h-3"/> 图片已关联</div>}
-                                                            {item.video && <div className="flex items-center gap-1 text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100"><Video className="w-3 h-3"/> 视频已关联</div>}
-                                                            {item.sourceUrl && <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200"><Globe className="w-3 h-3"/> 维基/来源已关联</div>}
+                                                            {item.image && <div className="flex items-center gap-1 text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"><ImageIcon className="w-3 h-3"/> 已关联图片</div>}
+                                                            {item.video && <div className="flex items-center gap-1 text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100"><Video className="w-3 h-3"/> 已关联讲解视频</div>}
+                                                            {item.sourceUrl && <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200"><Globe className="w-3 h-3"/> 来源/维基已关联</div>}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -680,7 +681,7 @@ export const BatchDataGenerator: React.FC = () => {
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300">
                                 <Code className="w-16 h-16 opacity-5 mb-4" />
-                                <p className="font-bold opacity-30 uppercase tracking-widest text-xs">Waiting...</p>
+                                <p className="font-bold opacity-30 uppercase tracking-widest text-xs">Waiting for data...</p>
                             </div>
                         )}
                     </div>
