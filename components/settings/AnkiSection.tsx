@@ -112,7 +112,7 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
   };
 
   /**
-   * 核心逻辑：从 Anki 导入数据
+   * 核心逻辑：从 Anki 导入数据 
    */
   const handleImportFromAnki = async () => {
       setImportStatus('processing');
