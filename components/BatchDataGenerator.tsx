@@ -45,7 +45,7 @@ interface MappingConfig {
     path: string;
     field: string;
     weight: number; 
-    isBase?: boolean; // 是否为基本信息（全局生效）
+    isBase?: boolean; // 是否为基本信息
 }
 
 interface ListConfig {
@@ -65,7 +65,7 @@ interface HistoryStep {
 }
 
 const RULES_STORAGE_KEY = 'local:batch-generator-rules';
-const MAX_DEPTH = 40;
+const MAX_DEPTH = 50;
 
 export const BatchDataGenerator: React.FC = () => {
     const [apiUrl, setApiUrl] = useState('https://dict.youdao.com/jsonapi?q={word}');
@@ -74,8 +74,9 @@ export const BatchDataGenerator: React.FC = () => {
     const [isFetching, setIsFetching] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     
-    // UI 布局状态
-    const [leftPanelWidth, setLeftPanelWidth] = useState(40); // 百分比
+    // UI 布局状态：左侧面板宽度（百分比）
+    const [leftPanelWidth, setLeftPanelWidth] = useState(40);
+    const resizerRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,31 +96,32 @@ export const BatchDataGenerator: React.FC = () => {
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const showToast = (message: string, type: ToastMessage['type'] = 'success') => setToast({ id: Date.now(), message, type });
 
-    // 拖拽调整大小逻辑
-    const startResizing = useCallback((e: React.MouseEvent) => {
+    // 左右拖拽逻辑
+    const onMouseDown = useCallback((e: React.MouseEvent) => {
         isResizing.current = true;
-        document.addEventListener('mousemove', handleResizing);
-        document.addEventListener('mouseup', stopResizing);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
     }, []);
 
-    const handleResizing = useCallback((e: MouseEvent) => {
+    const onMouseMove = useCallback((e: MouseEvent) => {
         if (!isResizing.current) return;
-        const newWidth = (e.clientX / window.innerWidth) * 100;
-        if (newWidth > 20 && newWidth < 80) {
-            setLeftPanelWidth(newWidth);
+        const offset = (e.clientX / window.innerWidth) * 100;
+        if (offset > 15 && offset < 85) {
+            setLeftPanelWidth(offset);
         }
     }, []);
 
-    const stopResizing = useCallback(() => {
+    const onMouseUp = useCallback(() => {
         isResizing.current = false;
-        document.removeEventListener('mousemove', handleResizing);
-        document.removeEventListener('mouseup', stopResizing);
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
         document.body.style.cursor = 'default';
         document.body.style.userSelect = 'auto';
     }, []);
 
+    // 规则持久化逻辑
     const loadRulesForApi = async (url: string) => {
         const allRules = await storage.getItem<Record<string, RuleSet>>(RULES_STORAGE_KEY) || {};
         const rule = allRules[url];
@@ -188,22 +190,9 @@ export const BatchDataGenerator: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `reword_rules_${new Date().getTime()}.json`;
+        a.download = `reword_batch_rules_${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('配置导出成功', 'success');
-    };
-
-    const handleExportPreviewData = () => {
-        if (!previewResult) return;
-        const blob = new Blob([JSON.stringify(previewResult, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `reword_batch_data_${new Date().getTime()}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('批导数据 JSON 导出成功', 'success');
     };
 
     const handleImportRules = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,14 +203,25 @@ export const BatchDataGenerator: React.FC = () => {
             try {
                 const config = JSON.parse(event.target?.result as string);
                 if (config.apiUrl) setApiUrl(config.apiUrl);
-                if (Array.isArray(config.mappings)) setMappings(config.mappings);
-                if (Array.isArray(config.lists)) setLists(config.lists);
-                saveHistory(config.mappings || [], config.lists || []);
-                showToast('配置导入成功', 'success');
-            } catch (err) { showToast('配置导入失败：格式错误', 'error'); }
+                if (config.mappings) setMappings(config.mappings);
+                if (config.lists) setLists(config.lists);
+                showToast('解析规则导入成功');
+            } catch(e) { showToast('导入格式错误', 'error'); }
         };
         reader.readAsText(file);
         e.target.value = '';
+    };
+
+    const handleExportBatchData = () => {
+        if (!previewResult) return;
+        const blob = new Blob([JSON.stringify(previewResult, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reword_final_data_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('批导数据导出成功');
     };
 
     const isListPath = (path: string) => lists.some(l => l.path === normalizePath(path));
@@ -235,7 +235,13 @@ export const BatchDataGenerator: React.FC = () => {
 
     const setMapping = (path: string, field: string) => {
         const nPath = normalizePath(path);
-        let newMappings = field ? (mappings.find(m => m.path === nPath) ? mappings.map(m => m.path === nPath ? { ...m, field } : m) : [...mappings, { path: nPath, field, weight: 1, isBase: false }]) : mappings.filter(m => m.path !== nPath);
+        let newMappings;
+        if (!field) { newMappings = mappings.filter(m => m.path !== nPath); } 
+        else {
+            const existing = mappings.find(m => m.path === nPath);
+            if (existing) { newMappings = mappings.map(m => m.path === nPath ? { ...m, field } : m); } 
+            else { newMappings = [...mappings, { path: nPath, field, weight: 1, isBase: false }]; }
+        }
         setMappings(newMappings); saveHistory(newMappings, lists);
     };
 
@@ -279,20 +285,28 @@ export const BatchDataGenerator: React.FC = () => {
                         <button onClick={() => toggleList(path)} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1 ${isList ? 'bg-purple-600 text-white' : 'bg-white text-slate-400 hover:border-purple-400'}`}>
                             <List className="w-3 h-3" /> {isList ? 'LIST' : 'SET LIST'}
                         </button>
-                        <select value={mapping?.field || ''} onChange={(e) => setMapping(path, e.target.value)} className={`text-[10px] font-bold h-8 rounded-lg border outline-none px-2 ${mapping ? (mapping.isBase ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white') : 'bg-white text-slate-400'}`}>
-                            <option value="">MAP FIELD...</option>
-                            {MAPPING_FIELDS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-                        </select>
-                        {mapping && (
-                            <>
-                                <button onClick={() => toggleBaseInfo(path)} className={`h-8 px-2 rounded-lg border flex items-center gap-1 text-[10px] font-bold transition-all ${mapping.isBase ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-400 hover:border-amber-300'}`} title="标记为基本信息">
-                                    <Info className="w-3.5 h-3.5" /> BASE
-                                </button>
-                                <select value={mapping.weight} onChange={(e) => setWeight(path, parseInt(e.target.value))} className="text-[10px] font-black text-blue-600 bg-white border border-slate-200 rounded-lg h-8 px-1">
-                                    {[1,2,3,4,5,6,7,8,9].map(w => <option key={w} value={w}>W{w}</option>)}
-                                </select>
-                            </>
-                        )}
+                        
+                        <div className="flex items-center gap-1">
+                            <select value={mapping?.field || ''} onChange={(e) => setMapping(path, e.target.value)} className={`text-[10px] font-bold h-8 rounded-lg border outline-none px-2 ${mapping ? (mapping.isBase ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white') : 'bg-white text-slate-400'}`}>
+                                <option value="">MAP FIELD...</option>
+                                {MAPPING_FIELDS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                            </select>
+                            
+                            {mapping && (
+                                <>
+                                    <button 
+                                        onClick={() => toggleBaseInfo(path)}
+                                        className={`h-8 px-2 rounded-lg border flex items-center gap-1 text-[10px] font-bold transition-all ${mapping.isBase ? 'bg-amber-100 border-amber-400 text-amber-700 shadow-inner' : 'bg-white border-slate-200 text-slate-400 hover:border-amber-300'}`}
+                                        title="标记为基本信息：生成的每个单词义项都将包含此字段"
+                                    >
+                                        <Info className="w-3.5 h-3.5" /> BASE
+                                    </button>
+                                    <select value={mapping.weight} onChange={(e) => setWeight(path, parseInt(e.target.value))} className="text-[10px] font-black text-blue-600 bg-white border border-slate-200 rounded-lg h-8 px-1">
+                                        {[1,2,3,4,5,6,7,8,9].map(w => <option key={w} value={w}>W{w}</option>)}
+                                    </select>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
                 {isObject && isExpanded && (
@@ -305,7 +319,7 @@ export const BatchDataGenerator: React.FC = () => {
     };
 
     /**
-     * 解析引擎重构：支持深度嵌套笛卡尔积和上下文继承
+     * 解析引擎深度重构：支持深度上下文继承
      */
     const runGeneration = async (isFull: boolean) => {
         const words = isFull ? importedWords : importedWords.slice(0, 1);
@@ -316,17 +330,15 @@ export const BatchDataGenerator: React.FC = () => {
         const mappingConfigs = mappings;
         const listPaths = new Set(lists.map(l => l.path));
 
-        // 数据清洗工具：提取对象中的文本
-        const sanitizeValue = (val: any) => {
+        // 数据清洗工具
+        const sanitize = (val: any) => {
             if (val === null || val === undefined) return '';
             if (typeof val === 'string') return val;
             if (typeof val === 'number') return val;
+            if (Array.isArray(val)) return sanitize(val[0]);
             if (typeof val === 'object') {
-                if (Array.isArray(val)) return sanitizeValue(val[0]);
-                const textKeys = ['text', 'value', 'word', 'name', 'chn_tran', 'tran', 'definition', 'i'];
-                for (const k of textKeys) {
-                    if (val[k]) return sanitizeValue(val[k]);
-                }
+                const keys = ['text', 'value', 'word', 'chn_tran', 'tran', 'definition', 'i'];
+                for (const k of keys) if (val[k]) return sanitize(val[k]);
                 return JSON.stringify(val);
             }
             return String(val);
@@ -334,134 +346,134 @@ export const BatchDataGenerator: React.FC = () => {
 
         try {
             for (const word of words) {
-                const res = await fetch(apiUrl.replace('{word}', encodeURIComponent(word)));
+                const url = apiUrl.replace('{word}', encodeURIComponent(word));
+                const res = await fetch(url);
                 const data = await res.json();
                 const wordFinalEntries: any[] = [];
 
-                // 第一阶段：全局预提取基本信息 (isBase)
-                const globalBaseCandidates = new Map<string, Array<{value: any, weight: number}>>();
+                // 第一阶段：全局预抓取 BASE 字段
+                const globalBase = new Map<string, Array<{val: any, w: number}>>();
                 const collectBase = (n: any, p: string, d: number) => {
                     if (d > MAX_DEPTH) return;
                     const np = normalizePath(p);
                     mappingConfigs.filter(m => m.path === np && m.isBase).forEach(m => {
-                        const vals = globalBaseCandidates.get(m.field) || [];
-                        globalBaseCandidates.set(m.field, [...vals, { value: n, weight: m.weight }]);
+                        const arr = globalBase.get(m.field) || [];
+                        globalBase.set(m.field, [...arr, { val: n, w: m.weight }]);
                     });
-                    if (typeof n === 'object' && n !== null) Object.entries(n).forEach(([k, v]) => collectBase(v, `${p}.${k}`, d + 1));
+                    if (n && typeof n === 'object') Object.entries(n).forEach(([k, v]) => collectBase(v, `${p}.${k}`, d + 1));
                 };
                 collectBase(data, 'root', 0);
 
-                // 第二阶段：核心递归遍历，支持分枝笛卡尔积
-                const finalize = (branchCandidates: Map<string, any[]>) => {
+                // 核心：产出词条
+                const finalize = (ctx: Map<string, any[]>) => {
                     const entry: any = { text: word };
-                    const allCands = new Map(branchCandidates);
-                    // 合并全局 Base 字段
-                    globalBaseCandidates.forEach((vals, field) => {
-                        const existing = allCands.get(field) || [];
-                        allCands.set(field, [...existing, ...vals]);
-                    });
+                    // 合并：当前路径上下文 + 全局基础
+                    const combined = new Map(ctx);
+                    globalBase.forEach((v, k) => combined.set(k, [...(combined.get(k) || []), ...v]));
 
-                    // 权重决议
-                    allCands.forEach((vals, field) => {
-                        const sorted = vals.sort((a, b) => a.weight - b.weight);
-                        for (const item of sorted) {
-                            if (item.value !== undefined && item.value !== null && item.value !== '') {
-                                entry[field] = sanitizeValue(item.value); 
-                                break;
+                    combined.forEach((candidates, field) => {
+                        const sorted = candidates.sort((a, b) => a.w - b.w);
+                        for (const cand of sorted) {
+                            if (cand.val !== undefined && cand.val !== null) {
+                                entry[field] = sanitize(cand.val); break;
                             }
                         }
                     });
 
-                    // 后处理逻辑
+                    // 兼容处理
                     if (entry.videoUrl) {
-                        entry.video = { url: entry.videoUrl, title: entry.videoTitle || '讲解视频', cover: entry.videoCover || '' };
+                        entry.video = { url: entry.videoUrl, title: entry.videoTitle || '讲解', cover: entry.videoCover || '' };
                         delete entry.videoUrl; delete entry.videoTitle; delete entry.videoCover;
                     }
                     ['inflections', 'tags', 'phrases', 'roots', 'synonyms'].forEach(f => {
                         if (entry[f] && typeof entry[f] === 'string') entry[f] = entry[f].split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean);
-                        else if (entry[f] && !Array.isArray(entry[f])) entry[f] = [entry[f]];
                     });
 
                     if (Object.keys(entry).length > 1) wordFinalEntries.push(entry);
                 };
 
                 /**
-                 * 嵌套递归解析：自动传递上下文
-                 * @param node 当前 JSON 节点
-                 * @param path 当前路径
-                 * @param inheritedCtx 继承自父级的字段池
+                 * 递归遍历：向下钻取时携带 Context 继承
                  */
                 const traverse = (node: any, path: string, inheritedCtx: Map<string, any[]>, depth: number) => {
                     if (depth > MAX_DEPTH) return;
                     const nPath = normalizePath(path);
                     
-                    // 1. 克隆父级上下文，准备本次深度的字段收集
+                    // 1. 捕获当前层级的静态字段映射
                     const currentCtx = new Map();
                     inheritedCtx.forEach((v, k) => currentCtx.set(k, [...v]));
 
-                    // 2. 收集当前节点的“同级”非基本映射（例如 gramcat 层级的 partofspeech）
-                    mappingConfigs.filter(m => m.path === nPath && !m.isBase).forEach(m => {
-                        const vals = currentCtx.get(m.field) || [];
-                        currentCtx.set(m.field, [...vals, { value: node, weight: m.weight }]);
-                    });
+                    // 如果当前节点是对象，先预扫描它旗下的静态字段（不跨越另一个 LIST 的话）
+                    if (node && typeof node === 'object' && !Array.isArray(node)) {
+                        Object.entries(node).forEach(([k, v]) => {
+                            const subPath = `${path}.${k}`;
+                            const subNPath = normalizePath(subPath);
+                            // 只收集那些不是 LIST 的映射
+                            if (!listPaths.has(subNPath)) {
+                                mappingConfigs.filter(m => m.path === subNPath && !m.isBase).forEach(m => {
+                                    const arr = currentCtx.get(m.field) || [];
+                                    currentCtx.set(m.field, [...arr, { val: v, w: m.weight }]);
+                                });
+                            }
+                        });
+                    }
 
-                    // 3. 循环点决议
+                    // 2. 检查当前是否触碰到了循环标记点
                     if (listPaths.has(nPath) && node) {
                         const items = Array.isArray(node) ? node : [node];
                         items.forEach((item, idx) => {
-                            const subPath = Array.isArray(node) ? `${path}.${idx}` : path;
-                            // 探测分枝内是否还有子列表标记
+                            const subInstancePath = Array.isArray(node) ? `${path}.${idx}` : path;
+                            // 探测该分枝是否还有更深的 LIST
                             const hasSubList = Array.from(listPaths).some(lp => lp.startsWith(nPath + '.') && lp !== nPath);
                             
-                            if (hasSubList && typeof item === 'object' && item !== null) {
-                                // 还没到叶子列表：继续分号子列表递归，携带当前已收集的字段（Context）
-                                Object.keys(item).forEach(k => traverse(item[k], `${subPath}.${k}`, currentCtx, depth + 1));
+                            if (hasSubList && item && typeof item === 'object') {
+                                // 还没到最深层循环，继续向下，传递已捕获的 Context
+                                Object.keys(item).forEach(k => traverse(item[k], `${subInstancePath}.${k}`, currentCtx, depth + 1));
                             } else {
-                                // 到了最深层循环点（叶子列表）：收集该节点下所有映射并产出一个独立词条
-                                const leafCtx = new Map();
-                                currentCtx.forEach((v, k) => leafCtx.set(k, [...v]));
-
-                                const collectLeafValues = (ln: any, lp: string, ld: number) => {
-                                    if (ld > MAX_DEPTH) return;
-                                    const lnp = normalizePath(lp);
-                                    mappingConfigs.filter(m => m.path === lnp && !m.isBase).forEach(m => {
-                                        const lvs = leafCtx.get(m.field) || [];
-                                        leafCtx.set(m.field, [...lvs, { value: ln, weight: m.weight }]);
+                                // 到达叶子循环点，产出一个词条，自动携带父级 Context（如 partofspeech）
+                                const leafCtx = new Map(currentCtx);
+                                // 也抓取当前循环项内部的所有静态字段
+                                const deepCollect = (nn: any, pp: string, dd: number) => {
+                                    if (dd > MAX_DEPTH) return;
+                                    const nnp = normalizePath(pp);
+                                    mappingConfigs.filter(m => m.path === nnp && !m.isBase).forEach(m => {
+                                        const arr = leafCtx.get(m.field) || [];
+                                        leafCtx.set(m.field, [...arr, { val: nn, w: m.weight }]);
                                     });
-                                    if (typeof ln === 'object' && ln !== null) Object.entries(ln).forEach(([lk, lv]) => collectLeafValues(lv, `${lp}.${lk}`, ld + 1));
+                                    if (nn && typeof nn === 'object') Object.entries(nn).forEach(([kk, vv]) => deepCollect(vv, `${pp}.${kk}`, dd + 1));
                                 };
-                                collectLeafValues(item, subPath, depth + 1);
+                                deepCollect(item, subInstancePath, depth);
                                 finalize(leafCtx);
                             }
                         });
-                    } else if (typeof node === 'object' && node !== null) {
-                        // 普通对象：继续深挖寻找 LIST 或字段
+                    } else if (node && typeof node === 'object') {
+                        // 没碰到 LIST，继续深度搜索
                         Object.keys(node).forEach(k => traverse(node[k], `${path}.${k}`, currentCtx, depth + 1));
                     }
                 };
 
                 traverse(data, 'root', new Map(), 0);
 
-                // 兜底：如果完全没有 LIST 触发，则产出单一映射条目
-                if (wordFinalEntries.length === 0 && mappings.length > 0) {
-                    const rootOnlyCtx = new Map();
+                // 兜底：如果完全没有 LIST 标记，则基于 ROOT 映射产出一个词条
+                if (wordFinalEntries.length === 0 && mappingConfigs.length > 0) {
+                    const rootCtx = new Map();
                     const collectSimple = (sn: any, sp: string, sd: number) => {
                         const snp = normalizePath(sp);
                         mappingConfigs.filter(m => m.path === snp && !m.isBase).forEach(m => {
-                            const svs = rootOnlyCtx.get(m.field) || [];
-                            rootOnlyCtx.set(m.field, [...svs, { value: sn, weight: m.weight }]);
+                            const arr = rootCtx.get(m.field) || [];
+                            rootCtx.set(m.field, [...arr, { val: sn, w: m.weight }]);
                         });
-                        if (typeof sn === 'object' && sn !== null && sd < MAX_DEPTH) Object.entries(sn).forEach(([sk, sv]) => collectSimple(sv, `${sp}.${sk}`, sd + 1));
+                        if (sn && typeof sn === 'object' && sd < MAX_DEPTH) Object.entries(sn).forEach(([sk, sv]) => collectSimple(sv, `${sp}.${sk}`, sd + 1));
                     };
                     collectSimple(data, 'root', 0);
-                    finalize(rootOnlyCtx);
+                    finalize(rootCtx);
                 }
 
                 allFinalResults.push(...wordFinalEntries);
             }
             setPreviewResult(allFinalResults);
             setSelectedPreviewIds(new Set(allFinalResults.map((_, i) => i)));
-            showToast(isFull ? `全量生成完成：共产出 ${allFinalResults.length} 个义项条目` : '预览生成成功', 'success');
+            showToast(isFull ? `全量生成完成：共产出 ${allFinalResults.length} 个条目` : '预览生成成功');
         } catch (e: any) { showToast(`解析失败: ${e.message}`, 'error'); } 
         finally { setIsGenerating(false); }
     };
@@ -474,13 +486,13 @@ export const BatchDataGenerator: React.FC = () => {
             category, addedAt: Date.now(), scenarioId: '1'
         }));
         await entriesStorage.setValue([...current, ...newOnes]);
-        showToast(`成功导入 ${newOnes.length} 个单词至 "${category}"`, 'success');
+        showToast(`成功导入 ${newOnes.length} 个单词至 "${category}"`);
         setPreviewResult(previewResult?.filter((_, idx) => !selectedPreviewIds.has(idx)) || null);
     };
 
     return (
         <div className="fixed inset-0 bg-slate-50 flex flex-col overflow-hidden font-sans">
-            <header className="bg-white border-b border-slate-200 px-8 h-20 flex items-center justify-between shrink-0 shadow-sm z-[100]">
+            <header className="bg-white border-b border-slate-200 px-8 h-20 flex items-center justify-between shrink-0 shadow-sm z-50">
                 <Logo />
                 <div className="flex items-center gap-4">
                     <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -496,15 +508,15 @@ export const BatchDataGenerator: React.FC = () => {
                     </div>
                     <div className="h-8 w-px bg-slate-200 mx-2"></div>
                     <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 text-white px-6 h-11 rounded-xl text-sm font-bold hover:bg-indigo-700 transition shadow-md flex items-center gap-2">
-                        <FileUp className="w-4 h-4" /> 导入单词 TXT
+                        <FileUp className="w-4 h-4" /> 导入待解析 TXT
                     </button>
                     <input type="file" ref={fileInputRef} className="hidden" accept=".txt" onChange={handleFileImport} />
                 </div>
             </header>
 
-            <main className="flex-1 flex p-6 overflow-hidden relative">
-                {/* 左侧：路径解析 */}
-                <div className="flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden" style={{ width: `${leftPanelWidth}%` }}>
+            <main className="flex-1 flex overflow-hidden relative">
+                {/* 左侧：规则面板 */}
+                <div className="flex flex-col bg-white border-r border-slate-200 overflow-hidden" style={{ width: `${leftPanelWidth}%` }}>
                     <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                         <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Database className="w-4 h-4 text-blue-600"/> 解析规则与分枝配置</h3>
                         <div className="flex gap-1">
@@ -514,47 +526,42 @@ export const BatchDataGenerator: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-white">
-                        {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center"><Database className="w-12 h-12 mb-4 opacity-5"/><p>导入单词后开始配置。支持深度分枝继承解析。</p></div>}
+                        {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center"><Database className="w-12 h-12 mb-4 opacity-5"/><p>点击上方按钮导入单词列表。系统支持笛卡尔积解析，<br/>子级义项会自动继承父级属性（如词性）。</p></div>}
                     </div>
                     <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
-                         <div className="flex gap-4 text-[10px] font-black text-slate-400 uppercase">
+                         <div className="flex gap-6 text-[10px] font-black text-slate-400 uppercase">
                             <div>LISTS: <span className="text-purple-600 text-lg">{lists.length}</span></div>
                             <div>MAPS: <span className="text-blue-600 text-lg">{mappings.length}</span></div>
                          </div>
                          <div className="flex gap-3">
                             <button onClick={() => runGeneration(false)} disabled={!jsonData || isGenerating} className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-slate-50 transition active:scale-95"><Eye className="w-4 h-4" /> 义项预览</button>
-                            <button onClick={() => runGeneration(true)} disabled={!jsonData || isGenerating} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 hover:bg-black shadow-xl transition active:scale-95">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />} 批量全量生成</button>
+                            <button onClick={() => runGeneration(true)} disabled={!jsonData || isGenerating} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 hover:bg-black shadow-xl transition active:scale-95">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />} 批量全量处理</button>
                          </div>
                     </div>
                 </div>
 
-                {/* 分割条 */}
+                {/* 缩放 Resizer */}
                 <div 
-                    className="w-1.5 hover:w-2 mx-1 flex items-center justify-center cursor-col-resize group transition-all"
-                    onMouseDown={startResizing}
+                    className="w-1 hover:w-2 bg-slate-100 hover:bg-blue-400 cursor-col-resize transition-all flex items-center justify-center"
+                    onMouseDown={onMouseDown}
                 >
-                    <div className="h-10 w-1 bg-slate-300 rounded-full group-hover:bg-blue-400"></div>
+                    <div className="h-8 w-1 rounded-full bg-slate-300"></div>
                 </div>
 
-                {/* 右侧：生成预览结果 */}
-                <div className="flex-1 flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                {/* 右侧：预览面板 */}
+                <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
                         <div className="flex items-center gap-4">
-                            <div className="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                                <button onClick={() => setPreviewMode('cards')} className={`p-1.5 rounded-md ${previewMode === 'cards' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
-                                <button onClick={() => setPreviewMode('json')} className={`p-1.5 rounded-md ${previewMode === 'json' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}><FileJson className="w-4 h-4" /></button>
+                            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shadow-sm">
+                                <button onClick={() => setPreviewMode('cards')} className={`p-1.5 rounded-md ${previewMode === 'cards' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-white'}`}><LayoutGrid className="w-4 h-4" /></button>
+                                <button onClick={() => setPreviewMode('json')} className={`p-1.5 rounded-md ${previewMode === 'json' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-white'}`}><FileJson className="w-4 h-4" /></button>
                             </div>
-                            <h3 className="font-black text-slate-800 text-sm">解析数据预览 ({previewResult?.length || 0})</h3>
+                            <h3 className="font-black text-slate-800 text-sm">生成预览 (条目数: {previewResult?.length || 0})</h3>
                         </div>
                         {previewResult && previewResult.length > 0 && (
                             <div className="flex items-center gap-2">
                                 {previewMode === 'json' ? (
-                                    <button 
-                                        onClick={handleExportPreviewData} 
-                                        className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-black flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition"
-                                    >
-                                        <FileDown className="w-4 h-4"/> 导出批导 JSON 数据
-                                    </button>
+                                    <button onClick={handleExportBatchData} className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition"><FileDown className="w-4 h-4"/> 导出批导数据 (JSON)</button>
                                 ) : (
                                     <>
                                         <button onClick={() => handleImportToStorage(WordCategory.WantToLearnWord)} className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg border border-amber-100 text-[10px] font-bold flex items-center gap-1 hover:bg-amber-100 transition"><Plus className="w-3 h-3"/>想学</button>
@@ -565,7 +572,7 @@ export const BatchDataGenerator: React.FC = () => {
                             </div>
                         )}
                     </div>
-                    <div className={`flex-1 overflow-auto custom-scrollbar p-6 ${previewMode === 'json' ? 'bg-slate-900' : 'bg-slate-50'}`}>
+                    <div className={`flex-1 overflow-auto custom-scrollbar p-6 ${previewMode === 'json' ? 'bg-slate-900' : ''}`}>
                         {previewResult ? (
                             previewMode === 'json' ? <pre className="text-emerald-400 text-xs font-mono">{JSON.stringify(previewResult, null, 2)}</pre> : (
                                 <div className="space-y-4">
@@ -586,8 +593,8 @@ export const BatchDataGenerator: React.FC = () => {
                                                     <div className="bg-amber-50 text-amber-700 px-3 py-1 rounded-lg text-xs font-bold border border-amber-100 truncate max-w-[400px]">{item.translation}</div>
                                                 </div>
                                                 <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold mb-3">
-                                                    {item.importance && <div className="flex text-amber-400">{'★'.repeat(item.importance)} <span className="ml-1 text-slate-300">(柯林斯星级)</span></div>}
-                                                    {item.partOfSpeech && <span className="italic text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 leading-none">{item.partOfSpeech}</span>}
+                                                    {item.importance && <div className="flex text-amber-400">{'★'.repeat(item.importance)} <span className="ml-1 text-slate-300">(Collins)</span></div>}
+                                                    {item.partOfSpeech && <span className="italic text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{item.partOfSpeech}</span>}
                                                     {item.cocaRank && <span>COCA #{item.cocaRank}</span>}
                                                 </div>
                                                 <div className="space-y-2">
@@ -599,14 +606,14 @@ export const BatchDataGenerator: React.FC = () => {
                                                     )}
                                                     {item.mixedSentence && (
                                                         <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100">
-                                                            <span className="text-[10px] text-purple-400 font-black uppercase block mb-1">混合预览</span>
+                                                            <span className="text-[10px] text-purple-400 font-black uppercase block mb-1">中英混合预览</span>
                                                             <p className="text-sm text-purple-900">{item.mixedSentence}</p>
                                                         </div>
                                                     )}
                                                     <div className="flex flex-wrap gap-2 pt-1">
-                                                        {item.image && <div className="flex items-center gap-1 text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"><ImageIcon className="w-3 h-3"/> 已关联图片</div>}
-                                                        {item.video && <div className="flex items-center gap-1 text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100"><Video className="w-3 h-3"/> 已关联视频</div>}
-                                                        {item.sourceUrl && <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200"><Globe className="w-3 h-3"/> 来源/维基</div>}
+                                                        {item.image && <div className="flex items-center gap-1 text-[10px] text-blue-500 bg-blue-50 px-2 py-1 rounded-md border border-blue-100"><ImageIcon className="w-3 h-3"/> 图片已映射</div>}
+                                                        {item.video && <div className="flex items-center gap-1 text-[10px] text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100"><Video className="w-3 h-3"/> 视频已映射</div>}
+                                                        {item.sourceUrl && <div className="flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200"><Globe className="w-3 h-3"/> 来源链接</div>}
                                                     </div>
                                                 </div>
                                             </div>
