@@ -22,7 +22,7 @@ const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, 
   );
 };
 
-// --- Standard Import Template (Comprehensive) ---
+// --- Standard Import Template (Comprehensive & Accurate) ---
 const IMPORT_TEMPLATE = [
   {
     "text": "serendipity",
@@ -35,6 +35,7 @@ const IMPORT_TEMPLATE = [
     "dictionaryExampleTranslation": "大自然通过机缘巧合创造了奇妙的事物。",
     "contextSentence": "It was pure serendipity that we met.",
     "contextSentenceTranslation": "我们相遇纯属机缘巧合。",
+    "mixedSentence": "It was pure serendipity (机缘巧合) that we met.",
     "inflections": ["serendipities", "serendipitous"],
     "tags": ["CET6", "GRE", "Literary"],
     "importance": 3,
@@ -50,7 +51,12 @@ const IMPORT_TEMPLATE = [
       { "text": "fluke", "trans": "侥幸" }
     ],
     "image": "https://example.com/image.jpg",
-    "sourceUrl": "https://example.com/video.mp4"
+    "video": {
+        "title": "讲解视频标题",
+        "url": "https://example.com/video.mp4",
+        "cover": "https://example.com/cover.jpg"
+    },
+    "sourceUrl": "https://en.wikipedia.org/wiki/Serendipity"
   },
   {
     "_说明": "本行仅为字段说明，导入时将被忽略。请确保 JSON 格式正确。",
@@ -58,21 +64,23 @@ const IMPORT_TEMPLATE = [
     "translation": "【建议填写】中文释义",
     "phoneticUs": "选填。美式音标",
     "phoneticUk": "选填。英式音标",
-    "partOfSpeech": "选填。词性简写 (n. v. adj. adv. 等)",
+    "partOfSpeech": "选填。词性 (n. v. adj. adv. 等)",
     "englishDefinition": "选填。英文定义",
-    "dictionaryExample": "选填。词典/标准例句",
-    "dictionaryExampleTranslation": "选填。词典例句对应翻译",
+    "dictionaryExample": "选填。词典标准例句",
+    "dictionaryExampleTranslation": "选填。例句翻译",
     "contextSentence": "选填。网页原句 (Context)",
     "contextSentenceTranslation": "选填。网页原句翻译",
-    "inflections": "选填。字符串数组。单词的变形列表。",
-    "tags": "选填。字符串数组。单词标签 (如: ['CET4', 'Computer'])",
-    "importance": "选填。数字 (0-5)。柯林斯星级 (Collins Stars)。",
-    "cocaRank": "选填。数字。COCA 语料库词频排名。",
-    "phrases": "选填。对象数组。格式: [{ 'text': '短语', 'trans': '释义' }]",
-    "roots": "选填。对象数组。格式: [{ 'root': '词根', 'words': [{ 'text': '同根词', 'trans': '释义' }] }]",
-    "synonyms": "选填。对象数组。格式: [{ 'text': '近义词', 'trans': '释义' }]",
-    "image": "选填。图片链接 (URL)",
-    "sourceUrl": "选填。视频或来源地址 (URL)"
+    "mixedSentence": "选填。中英混合例句（单词替换后的中文原句）",
+    "inflections": "选填。字符串数组。单词的变形列表，用于网页自动匹配。",
+    "tags": "选填。字符串数组。标签（如: ['CET4', 'SAT']）",
+    "importance": "选填。数字 (1-5)。柯林斯星级。",
+    "cocaRank": "选填。数字。COCA 词频排名。",
+    "phrases": "选填。对象数组。[{ 'text': '短语', 'trans': '释义' }]",
+    "roots": "选填。对象数组。[{ 'root': '词根', 'words': [{ 'text': '同根词', 'trans': '释义' }] }]",
+    "synonyms": "选填。对象数组。[{ 'text': '近义词', 'trans': '释义' }]",
+    "image": "选填。单词配图链接 (URL)",
+    "video": "选填。对象。讲解视频信息 { 'title', 'url', 'cover' }",
+    "sourceUrl": "选填。维基百科或其他来源参考地址 (URL)"
   }
 ];
 
@@ -310,7 +318,7 @@ export const WordManager: React.FC<WordManagerProps> = ({
      const a = document.createElement('a');
      a.href = url;
      const prefix = selectedWords.size > 0 ? 'selected' : activeTab;
-     a.download = `contextlingo_export_${prefix}_${dataToExport.length}words_${Date.now()}.json`;
+     a.download = `reword_export_${prefix}_${dataToExport.length}words_${Date.now()}.json`;
      document.body.appendChild(a);
      a.click();
      document.body.removeChild(a);
@@ -323,7 +331,7 @@ export const WordManager: React.FC<WordManagerProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'lingoflow_import_template.json';
+      a.download = 'reword_import_template.json';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -358,82 +366,39 @@ export const WordManager: React.FC<WordManagerProps> = ({
                throw new Error("JSON Root is not an array");
            }
         } catch (err) {
-           showToast("文件格式错误：仅支持符合模板规范的 JSON 文件。", "error");
+           showToast("文件格式错误", "error");
            e.target.value = ''; 
            return;
         }
 
         const targetCategory = activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab;
-        
         let successCount = 0;
         let failCount = 0;
-        showToast(`开始处理 ${candidates.length} 个单词...`, 'info');
         const newEntriesToAdd: WordEntry[] = [];
 
         const isDuplicate = (t: string, trans?: string) => {
-            const existing = entries.some(e => 
-                e.text.toLowerCase() === t.toLowerCase() && 
-                (e.translation?.trim() === trans?.trim())
-            );
-            const inBatch = newEntriesToAdd.some(e => 
-                e.text.toLowerCase() === t.toLowerCase() && 
-                (e.translation?.trim() === trans?.trim())
-            );
-            return existing || inBatch;
+            return entries.some(e => e.text.toLowerCase() === t.toLowerCase() && (e.translation?.trim() === trans?.trim()));
         };
 
         for (const candidate of candidates) {
-            if (!candidate.text || typeof candidate.text !== 'string' || candidate.text.includes('必填')) {
-                continue;
-            }
+            if (!candidate.text || typeof candidate.text !== 'string' || candidate.text.includes('必填')) continue;
+            if (isDuplicate(candidate.text, candidate.translation)) { failCount++; continue; }
 
-            const scenarioId = selectedScenarioId === 'all' ? '1' : selectedScenarioId;
-
-            try {
-                if (isDuplicate(candidate.text, candidate.translation)) {
-                    failCount++;
-                    continue;
-                }
-
-                newEntriesToAdd.push({
-                    id: `import-direct-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                    text: candidate.text,
-                    translation: candidate.translation || '',
-                    phoneticUs: candidate.phoneticUs,
-                    phoneticUk: candidate.phoneticUk,
-                    partOfSpeech: candidate.partOfSpeech,
-                    englishDefinition: candidate.englishDefinition,
-                    contextSentence: candidate.contextSentence,
-                    contextSentenceTranslation: candidate.contextSentenceTranslation,
-                    mixedSentence: candidate.mixedSentence,
-                    dictionaryExample: candidate.dictionaryExample,
-                    dictionaryExampleTranslation: candidate.dictionaryExampleTranslation,
-                    inflections: candidate.inflections || [],
-                    tags: candidate.tags || [],
-                    importance: typeof candidate.importance === 'number' ? candidate.importance : 0,
-                    cocaRank: typeof candidate.cocaRank === 'number' ? candidate.cocaRank : 0,
-                    phrases: candidate.phrases || [],
-                    roots: candidate.roots || [],
-                    synonyms: candidate.synonyms || [],
-                    image: candidate.image,
-                    video: candidate.video,
-                    category: targetCategory,
-                    addedAt: Date.now(),
-                    scenarioId,
-                    sourceUrl: candidate.sourceUrl
-                });
-                successCount++;
-            } catch (err) {
-                console.error(err);
-                failCount++;
-            }
+            newEntriesToAdd.push({
+                ...candidate,
+                id: `import-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                category: targetCategory,
+                addedAt: Date.now(),
+                scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId
+            });
+            successCount++;
         }
 
         if (newEntriesToAdd.length > 0) {
             setEntries(prev => [...prev, ...newEntriesToAdd]);
-            showToast(`导入完成: 新增 ${successCount} (至 ${targetCategory}), 重复/失败 ${failCount}`, 'success');
+            showToast(`导入完成: 新增 ${successCount}`, 'success');
         } else {
-             showToast(`导入结束: 没有新增单词 (全部重复或格式无效)`, 'warning');
+             showToast(`导入结束: 没有新增单词`, 'warning');
         }
      };
      reader.readAsText(file);
@@ -441,54 +406,21 @@ export const WordManager: React.FC<WordManagerProps> = ({
   };
 
   const handleAddWord = async (entryData: Partial<WordEntry>) => {
-      try {
-          const isDuplicate = entries.some(e => 
-              e.text.toLowerCase() === entryData.text?.toLowerCase() && 
-              e.translation?.trim() === entryData.translation?.trim()
-          );
+      const isDuplicate = entries.some(e => e.text.toLowerCase() === entryData.text?.toLowerCase());
+      if (isDuplicate) { showToast(`单词已存在`, 'warning'); return; }
 
-          if (isDuplicate) {
-              showToast(`"${entryData.text}" (${entryData.translation}) 已存在，未重复添加。`, 'warning');
-              return;
-          }
+      const targetCategory = entryData.category || (activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab);
+      const newEntry: WordEntry = {
+          ...entryData,
+          id: `manual-${Date.now()}`,
+          text: entryData.text!,
+          category: targetCategory,
+          addedAt: Date.now(),
+          scenarioId: '1',
+      } as WordEntry;
 
-          let targetCategory = entryData.category;
-          if (!targetCategory) {
-              targetCategory = activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab;
-          }
-
-          const newEntry: WordEntry = {
-              id: `manual-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              text: entryData.text!,
-              translation: entryData.translation,
-              englishDefinition: entryData.englishDefinition,
-              phoneticUs: entryData.phoneticUs,
-              phoneticUk: entryData.phoneticUk,
-              contextSentence: entryData.contextSentence,
-              mixedSentence: entryData.mixedSentence,
-              dictionaryExample: entryData.dictionaryExample,
-              dictionaryExampleTranslation: entryData.dictionaryExampleTranslation,
-              inflections: entryData.inflections || [],
-              tags: entryData.tags || [],
-              importance: entryData.importance || 0,
-              cocaRank: entryData.cocaRank || 0,
-              partOfSpeech: entryData.partOfSpeech, 
-              phrases: entryData.phrases || [],
-              roots: entryData.roots || [],
-              synonyms: entryData.synonyms || [],
-              image: entryData.image,
-              video: entryData.video,
-              category: targetCategory,
-              addedAt: entryData.addedAt || Date.now(),
-              scenarioId: selectedScenarioId === 'all' ? '1' : selectedScenarioId,
-          };
-
-          setEntries(prev => [newEntry, ...prev]);
-          showToast('添加成功', 'success');
-      } catch (e: any) {
-          console.error(e);
-          showToast('添加失败', 'error');
-      }
+      setEntries(prev => [newEntry, ...prev]);
+      showToast('添加成功', 'success');
   };
 
   const handleDragStart = (index: number) => setDraggedItemIndex(index);
@@ -506,248 +438,46 @@ export const WordManager: React.FC<WordManagerProps> = ({
   
   const getTabLabel = (tab: WordTab) => tab === 'all' ? '所有单词' : tab;
 
-  const getTabDescription = (tab: WordTab) => {
-      if (tab === 'all') return "包含所有状态的单词";
-      if (tab === WordCategory.WantToLearnWord) return "计划未来要学习的单词";
-      if (tab === WordCategory.LearningWord) return "已经在网页上碰到过的单词";
-      if (tab === WordCategory.KnownWord) return "已经会的单词";
-      return "";
-  };
-
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col relative min-h-[600px]">
       <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImportFile} />
-
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="border-b border-slate-200 px-6 py-5 bg-slate-50 rounded-t-xl flex justify-between items-center flex-wrap gap-4">
-        <div>
-           <h2 className="text-xl font-bold text-slate-800">词汇库管理</h2>
-           <p className="text-sm text-slate-500 mt-1">管理、筛选及编辑您的个性化词库</p>
-        </div>
-        <div>
-           <Tooltip text="配置合并策略、显示内容及顺序">
-              <button 
-                onClick={() => setIsMergeModalOpen(true)}
-                className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition shadow-sm shadow-blue-200"
-              >
-                <Settings2 className="w-4 h-4 mr-2" /> 显示配置
-              </button>
-           </Tooltip>
-        </div>
+        <div><h2 className="text-xl font-bold text-slate-800">词汇库管理</h2><p className="text-sm text-slate-500 mt-1">管理、筛选及编辑您的个性化词库</p></div>
+        <Tooltip text="配置显示内容及排序"><button onClick={() => setIsMergeModalOpen(true)} className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition shadow-sm shadow-blue-200"><Settings2 className="w-4 h-4 mr-2" /> 显示配置</button></Tooltip>
       </div>
       
-      <AddWordModal 
-        isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
-        onConfirm={handleAddWord}
-        initialCategory={activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab}
-      />
-
-      <MergeConfigModal 
-        isOpen={isMergeModalOpen}
-        onClose={() => setIsMergeModalOpen(false)}
-        mergeConfig={mergeConfig}
-        setMergeConfig={setMergeConfig}
-        showConfig={showConfig}
-        setShowConfig={setShowConfig}
-        handleDragStart={handleDragStart}
-        handleDragOver={handleDragOver}
-        handleDragEnd={handleDragEnd}
-        draggedItemIndex={draggedItemIndex}
-      />
+      <AddWordModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onConfirm={handleAddWord} initialCategory={activeTab === 'all' ? WordCategory.WantToLearnWord : activeTab} />
+      <MergeConfigModal isOpen={isMergeModalOpen} onClose={() => setIsMergeModalOpen(false)} mergeConfig={mergeConfig} setMergeConfig={setMergeConfig} showConfig={showConfig} setShowConfig={setShowConfig} handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDragEnd={handleDragEnd} draggedItemIndex={draggedItemIndex} />
 
       <div className="border-b border-slate-200 bg-white p-4 space-y-4">
         <div className="flex overflow-x-auto gap-2 pb-2 hide-scrollbar">
           {(['all', ...Object.values(WordCategory)] as WordTab[]).map((tab) => (
-            <Tooltip key={tab} text={getTabDescription(tab)}>
-                <button
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all flex items-center ${
-                    activeTab === tab
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
-                    : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
-                }`}
-                >
-                {tab === 'all' && <List className="w-4 h-4 mr-2" />}
-                {getTabLabel(tab)}
-                </button>
-            </Tooltip>
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 text-sm font-medium rounded-full whitespace-nowrap transition-all ${activeTab === tab ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'}`}>{getTabLabel(tab)}</button>
           ))}
         </div>
         
         <div className="flex flex-wrap gap-4 items-center justify-between bg-slate-50/50 p-3 rounded-xl border border-slate-100">
            <div className="flex items-center gap-4 flex-1">
-              <div className="flex items-center">
-                 <button onClick={toggleSelectAll} className="flex items-center text-sm font-medium text-slate-600 hover:text-slate-900 select-none">
-                    {allSelected ? <CheckSquare className="w-5 h-5 mr-2 text-blue-600"/> : <Square className="w-5 h-5 mr-2 text-slate-400"/>}
-                    全选
-                 </button>
-              </div>
-              
-              <div className="flex items-center space-x-2 border-l border-slate-200 pl-4">
-                  <Filter className="w-4 h-4 text-slate-400" />
-                  <select 
-                    value={selectedScenarioId}
-                    onChange={(e) => setSelectedScenarioId(e.target.value)}
-                    className="text-sm border-none bg-transparent focus:ring-0 text-slate-700 font-medium cursor-pointer hover:bg-slate-100 rounded"
-                  >
-                    <option value="all">所有场景</option>
-                    {scenarios.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-              </div>
-
-              <div className="flex items-center space-x-2 border-l border-slate-200 pl-4 flex-1 max-w-xs">
-                 <Search className="w-4 h-4 text-slate-400" />
-                 <input 
-                    type="text" 
-                    placeholder="搜索单词或释义..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full text-sm border-none bg-transparent focus:ring-0 text-slate-700 placeholder:text-slate-400"
-                 />
-              </div>
+              <button onClick={toggleSelectAll} className="flex items-center text-sm font-medium text-slate-600 hover:text-slate-900">{allSelected ? <CheckSquare className="w-5 h-5 mr-2 text-blue-600"/> : <Square className="w-5 h-5 mr-2 text-slate-400"/>}全选</button>
+              <div className="flex items-center space-x-2 border-l border-slate-200 pl-4"><Filter className="w-4 h-4 text-slate-400" /><select value={selectedScenarioId} onChange={(e) => setSelectedScenarioId(e.target.value)} className="text-sm border-none bg-transparent focus:ring-0 text-slate-700 font-medium cursor-pointer rounded"><option value="all">所有场景</option>{scenarios.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></div>
+              <div className="flex items-center space-x-2 border-l border-slate-200 pl-4 flex-1 max-w-xs"><Search className="w-4 h-4 text-slate-400" /><input type="text" placeholder="搜索..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full text-sm border-none bg-transparent focus:ring-0 text-slate-700" /></div>
            </div>
-
            <div className="flex gap-2 items-center">
               {selectedWords.size > 0 ? (
-                 <>
-                    {activeTab === WordCategory.KnownWord && (
-                        <>
-                           <button onClick={() => handleBatchMove(WordCategory.WantToLearnWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg hover:bg-amber-100 transition animate-in slide-in-from-right-2">
-                              <RotateCcw className="w-4 h-4 mr-2" /> 移至想学
-                           </button>
-                           <button onClick={() => handleBatchMove(WordCategory.LearningWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition animate-in slide-in-from-right-2">
-                              <BookOpen className="w-4 h-4 mr-2" /> 移至正在学
-                           </button>
-                        </>
-                    )}
-                    {activeTab === WordCategory.WantToLearnWord && (
-                        <>
-                            <button onClick={() => handleBatchMove(WordCategory.LearningWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded-lg hover:bg-blue-100 transition animate-in slide-in-from-right-2">
-                               <ArrowRight className="w-4 h-4 mr-2" /> 开始学习
-                            </button>
-                            <button onClick={() => handleBatchMove(WordCategory.KnownWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-100 rounded-lg hover:bg-green-100 transition animate-in slide-in-from-right-2">
-                               <CheckCircle className="w-4 h-4 mr-2" /> 设为已掌握
-                            </button>
-                        </>
-                    )}
-                    {activeTab === WordCategory.LearningWord && (
-                         <>
-                            <button onClick={() => handleBatchMove(WordCategory.WantToLearnWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition animate-in slide-in-from-right-2">
-                               <RotateCcw className="w-4 h-4 mr-2" /> 移回想学
-                            </button>
-                            <button onClick={() => handleBatchMove(WordCategory.KnownWord)} className="flex items-center px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-100 rounded-lg hover:bg-green-100 transition animate-in slide-in-from-right-2">
-                               <GraduationCap className="w-4 h-4 mr-2" /> 设为已掌握
-                            </button>
-                         </>
-                    )}
-                    <div className="w-px h-6 bg-slate-300 mx-2"></div>
-                    <button onClick={handleExport} className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition animate-in slide-in-from-right-2">
-                        <Download className="w-4 h-4 mr-2" /> 导出 ({selectedWords.size})
-                    </button>
-                    <button onClick={handleDeleteSelected} className="flex items-center px-3 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition animate-in slide-in-from-right-2">
-                        <Trash2 className="w-4 h-4 mr-2" /> 删除 ({selectedWords.size})
-                    </button>
-                 </>
+                 <><button onClick={handleExport} className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition"><Download className="w-4 h-4 mr-2" /> 导出 ({selectedWords.size})</button><button onClick={handleDeleteSelected} className="flex items-center px-3 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition"><Trash2 className="w-4 h-4 mr-2" /> 删除</button></>
               ) : (
-                  <>
-                    {!isAllWordsTab && (
-                        <>
-                        <Tooltip text={`手动添加单词至"${getTabLabel(activeTab)}"`}>
-                            <button 
-                                onClick={() => setIsAddModalOpen(true)}
-                                className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition"
-                            >
-                                <Plus className="w-4 h-4 mr-2" /> 新增
-                            </button>
-                        </Tooltip>
-
-                        <div className="relative inline-flex items-stretch" ref={importDropdownRef}>
-                            <Tooltip text="支持 JSON 格式文件。将直接导入文件中的数据至当前标签页。">
-                                <button 
-                                    onClick={triggerImport}
-                                    className="flex items-center px-3 py-1.5 text-sm font-bold text-blue-600 bg-white border border-slate-200 rounded-l-lg hover:bg-blue-50 hover:border-blue-200 transition-all border-r-0"
-                                >
-                                    <Upload className="w-4 h-4 mr-2" /> 批量导入
-                                </button>
-                            </Tooltip>
-                            
-                            <button 
-                                onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)}
-                                className={`flex items-center px-1.5 border border-slate-200 rounded-r-lg hover:bg-slate-50 transition-all ${isImportDropdownOpen ? 'bg-slate-100' : 'bg-white'}`}
-                            >
-                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isImportDropdownOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {isImportDropdownOpen && (
-                                <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 overflow-hidden">
-                                    <div className="px-4 py-2 border-b border-slate-50 mb-1">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">导入选项</span>
-                                    </div>
-                                    
-                                    <button 
-                                        onClick={handleDownloadTemplate}
-                                        className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"
-                                    >
-                                        <div className="p-2 bg-blue-50 rounded-lg text-blue-600 group-hover:bg-blue-100 transition-colors">
-                                            <FileDown className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex flex-col text-left">
-                                            <span className="text-sm font-bold text-slate-700">下载导入模板</span>
-                                            <span className="text-[10px] text-slate-400 leading-relaxed mt-0.5">标准条目 JSON 格式。</span>
-                                        </div>
-                                    </button>
-
-                                    <button 
-                                        onClick={handleOpenBatchGenerator}
-                                        className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group border-t border-slate-50"
-                                    >
-                                        <div className="p-2 bg-purple-50 rounded-lg text-purple-600 group-hover:bg-purple-100 transition-colors">
-                                            <Binary className="w-4 h-4" />
-                                        </div>
-                                        <div className="flex flex-col text-left">
-                                            <span className="text-sm font-bold text-slate-700">生成批导数据</span>
-                                            <span className="text-[10px] text-slate-400 leading-relaxed mt-0.5">配置 API 路径，自定义字段映射。</span>
-                                        </div>
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        </>
-                    )}
-
-                    {isAllWordsTab && (
-                        <Tooltip text="导出当前列表">
-                            <button 
-                                onClick={handleExport}
-                                className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition"
-                            >
-                            <Download className="w-4 h-4 mr-2" /> 导出
-                            </button>
-                        </Tooltip>
-                    )}
-                  </>
+                  <><button onClick={() => setIsAddModalOpen(true)} className="flex items-center px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition"><Plus className="w-4 h-4 mr-2" /> 新增</button>
+                    <div className="relative inline-flex items-stretch" ref={importDropdownRef}><button onClick={triggerImport} className="flex items-center px-3 py-1.5 text-sm font-bold text-blue-600 bg-white border border-slate-200 rounded-l-lg hover:bg-blue-50 transition border-r-0"><Upload className="w-4 h-4 mr-2" /> 批量导入</button><button onClick={() => setIsImportDropdownOpen(!isImportDropdownOpen)} className={`flex items-center px-1.5 border border-slate-200 rounded-r-lg hover:bg-slate-50 transition-all ${isImportDropdownOpen ? 'bg-slate-100' : 'bg-white'}`}><ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isImportDropdownOpen ? 'rotate-180' : ''}`} /></button>
+                    {isImportDropdownOpen && (<div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-xl shadow-2xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 overflow-hidden"><div className="px-4 py-2 border-b border-slate-50 mb-1"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">导入选项</span></div><button onClick={handleDownloadTemplate} className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group"><div className="p-2 bg-blue-50 rounded-lg text-blue-600 group-hover:bg-blue-100"><FileDown className="w-4 h-4" /></div><div className="flex flex-col text-left"><span className="text-sm font-bold text-slate-700">下载导入模板</span><span className="text-[10px] text-slate-400">标准 JSON 格式。</span></div></button><button onClick={handleOpenBatchGenerator} className="w-full flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors group border-t border-slate-50"><div className="p-2 bg-purple-50 rounded-lg text-purple-600 group-hover:bg-purple-100"><Binary className="w-4 h-4" /></div><div className="flex flex-col text-left"><span className="text-sm font-bold text-slate-700">生成批导数据</span><span className="text-[10px] text-slate-400">配置路径，自定义映射。</span></div></button></div>)}</div></>
               )}
            </div>
         </div>
       </div>
 
       <div className="bg-slate-50 p-4 space-y-4 flex-1">
-        <WordList 
-           groupedEntries={groupedEntries}
-           selectedWords={selectedWords}
-           toggleSelectGroup={toggleSelectGroup}
-           isGroupSelected={isGroupSelected}
-           showConfig={showConfig}
-           mergeConfig={mergeConfig}
-           isAllWordsTab={isAllWordsTab}
-           searchQuery={searchQuery}
-           ttsSpeed={ttsSpeed}
-           onOpenDetail={onOpenDetail} 
-        />
+        <WordList groupedEntries={groupedEntries} selectedWords={selectedWords} toggleSelectGroup={toggleSelectGroup} isGroupSelected={isGroupSelected} showConfig={showConfig} mergeConfig={mergeConfig} isAllWordsTab={isAllWordsTab} searchQuery={searchQuery} ttsSpeed={ttsSpeed} onOpenDetail={onOpenDetail} />
       </div>
     </div>
   );
