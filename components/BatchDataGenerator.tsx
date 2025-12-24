@@ -366,7 +366,7 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
                     
-                    // 1. 特殊字段：词态/标签等字符串切分为数组
+                    // 1. 特殊字段： 词态/标签等字符串切分为数组
                     ['inflections', 'tags'].forEach(field => {
                          if (finalEntry[field] && typeof finalEntry[field] === 'string') {
                              finalEntry[field] = finalEntry[field].split(/[,，;；]/).map((s: string) => s.trim()).filter(Boolean);
