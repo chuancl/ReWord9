@@ -142,9 +142,13 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
           const existingModels = await getModelNames(config.url);
           if (!existingModels.includes(REWORD_MODEL_NAME)) {
               if (confirm(`Anki 中缺少 "${REWORD_MODEL_NAME}" 笔记类型。是否立即初始化？`)) {
-                  const fields = ["Word", "Translation", "PhoneticUs", "PhoneticUk", "POS", "DefinitionEN", "Context", "ContextTrans", "DictExample", "DictExampleTrans", "Inflections", "Tags", "Importance", "CocaRank", "SourceUrl"];
+                  // 扩展字段：增加 Image 和 Video
+                  const fields = ["Word", "Translation", "PhoneticUs", "PhoneticUk", "POS", "DefinitionEN", "Context", "ContextTrans", "DictExample", "DictExampleTrans", "Inflections", "Tags", "Importance", "CocaRank", "SourceUrl", "Image", "Video"];
                   
                   const cardFront = `
+                    <div style="text-align: center; margin-bottom: 15px;">
+                        {{#Image}}<div style="margin-bottom: 10px;">{{Image}}</div>{{/Image}}
+                    </div>
                     <div style="font-size: 28px; font-weight: bold; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">{{Word}}</div>
                     <div style="display:flex; gap: 12px; margin-bottom: 12px; font-family: monospace; color: #64748b; font-size: 14px;">
                         <span><b>US:</b> {{PhoneticUs}}</span>
@@ -156,6 +160,7 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
                         <div style="font-size: 11px; color: #94a3b8; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Context</div>
                         <div style="font-style: italic; color: #64748b; font-size: 13px;">{{Context}}</div>
                     </div>
+                    {{#Video}}<div style="margin-top: 15px; text-align: center; font-size: 12px; color: #3b82f6;">Video available: {{Video}}</div>{{/Video}}
                     <div style="margin-top: 12px; font-size: 11px; color: #cbd5e1; text-align: right;">Tags: {{Tags}} | Stars: {{Importance}} | COCA: {{CocaRank}}</div>
                   `;
                   
@@ -208,6 +213,12 @@ export const AnkiSection: React.FC<AnkiSectionProps> = ({ config, setConfig, ent
                       importance: parseInt(f.Importance?.value) || 0,
                       cocaRank: parseInt(f.CocaRank?.value) || 0,
                       sourceUrl: clean(f.SourceUrl?.value),
+                      // 图片和视频处理
+                      image: clean(f.Image?.value), 
+                      video: clean(f.Video?.value) ? {
+                          title: "Anki Video",
+                          url: clean(f.Video?.value),
+                      } : undefined,
                       category: category as WordCategory,
                       addedAt: Date.now(),
                       scenarioId: '1'
