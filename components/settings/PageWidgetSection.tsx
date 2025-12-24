@@ -33,7 +33,8 @@ export const PageWidgetSection: React.FC<PageWidgetSectionProps> = ({ widget, se
 
    // 设置页面预览跳转也使用新标签页逻辑
    const handlePreviewWordClick = () => {
-       const url = browser.runtime.getURL('/options.html?view=word-detail&word=ephemeral');
+       // 使用 (browser.runtime as any).getURL 修复 Property 'getURL' does not exist 错误
+       const url = (browser.runtime as any).getURL('/options.html?view=word-detail&word=ephemeral');
        window.open(url, '_blank');
    };
 
@@ -215,7 +216,7 @@ export const PageWidgetSection: React.FC<PageWidgetSectionProps> = ({ widget, se
                                       <p className="text-sm text-slate-700 leading-relaxed pl-2">时尚本质上是 ephemeral (短暂) 的。</p>
                                    </div>
                                 );
-                                if (item.id === 'dictExample') return (
+                                if (item.id === 'dictionary') return (
                                    <div key="dict" className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 relative">
                                       <div className="absolute left-0 top-3 w-1 h-8 bg-emerald-500 rounded-r"></div>
                                       <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 pl-2">词典例句 (Dictionary)</span>

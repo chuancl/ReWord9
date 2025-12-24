@@ -34,7 +34,8 @@ export const WordList: React.FC<WordListProps> = ({
 
     // 统一的新标签页打开逻辑
     const handleWordClick = (word: string) => {
-        const url = browser.runtime.getURL(`/options.html?view=word-detail&word=${encodeURIComponent(word)}`);
+        // 使用 (browser.runtime as any).getURL 修复 Property 'getURL' does not exist 错误
+        const url = (browser.runtime as any).getURL(`/options.html?view=word-detail&word=${encodeURIComponent(word)}`);
         window.open(url, '_blank');
     };
 

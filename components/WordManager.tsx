@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { WordCategory, WordEntry, MergeStrategyConfig, WordTab, Scenario, AppView } from '../types';
 import { DEFAULT_MERGE_STRATEGY } from '../constants';
@@ -353,7 +352,8 @@ export const WordManager: React.FC<WordManagerProps> = ({
   };
 
   const handleOpenBatchGenerator = () => {
-      const url = browser.runtime.getURL('/batch-generator.html');
+      // 使用 (browser.runtime as any).getURL 修复 Property 'getURL' does not exist 错误
+      const url = (browser.runtime as any).getURL('/batch-generator.html');
       window.open(url, '_blank');
       setIsImportDropdownOpen(false);
   };

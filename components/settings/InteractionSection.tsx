@@ -118,7 +118,7 @@ export const InteractionSection: React.FC<InteractionSectionProps> = ({ config, 
                   if (!isMounted || !isPreviewVisible) break;
                   // 核心：使用 playWordAudio 替代简单的 TTS
                   await playWordAudio("ephemeral", config.autoPronounceAccent);
-                  if (i < config.autoPronounceCount - 1 && isMounted && isPreviewVisible) {
+                  if (i < config.autoPronounceCount - 1 && isMounted && isVisible) {
                     await new Promise(r => setTimeout(r, 300));
                   }
               }
@@ -196,7 +196,8 @@ export const InteractionSection: React.FC<InteractionSectionProps> = ({ config, 
   // --- Actions ---
   const openDetailPreview = (e: React.MouseEvent) => {
       e.stopPropagation();
-      const url = browser.runtime.getURL('/options.html?view=word-detail&word=ephemeral');
+      // 使用 (browser.runtime as any).getURL 修复 Property 'getURL' does not exist 错误
+      const url = (browser.runtime as any).getURL('/options.html?view=word-detail&word=ephemeral');
       window.open(url, '_blank');
   };
 
