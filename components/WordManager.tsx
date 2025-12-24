@@ -22,7 +22,7 @@ const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, 
   );
 };
 
-// --- Standard Import Template (Comprehensive & Accurate) ---
+// --- Standard Import Template (Comprehensive & Accurate)  ---
 const IMPORT_TEMPLATE = [
   {
     "text": "serendipity",
