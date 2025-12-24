@@ -31,11 +31,10 @@ const IMPORT_TEMPLATE = [
     "phoneticUk": "/ˌsɛrənˈdɪpɪti/",
     "partOfSpeech": "n.",
     "englishDefinition": "The occurrence and development of events by chance in a happy or beneficial way.",
-    "contextSentence": "It was pure serendipity that we met.",
-    "contextSentenceTranslation": "我们相遇纯属机缘巧合。",
-    "mixedSentence": "It was pure serendipity (机缘巧合) that we met.",
     "dictionaryExample": "Nature has created wonderful things by serendipity.",
     "dictionaryExampleTranslation": "大自然通过机缘巧合创造了奇妙的事物。",
+    "contextSentence": "It was pure serendipity that we met.",
+    "contextSentenceTranslation": "我们相遇纯属机缘巧合。",
     "inflections": ["serendipities", "serendipitous"],
     "tags": ["CET6", "GRE", "Literary"],
     "importance": 3,
@@ -50,36 +49,30 @@ const IMPORT_TEMPLATE = [
       { "text": "chance", "trans": "机会" },
       { "text": "fluke", "trans": "侥幸" }
     ],
-    "image": "",
-    "video": {
-        "title": "Explanation Video",
-        "url": "https://example.com/video.mp4",
-        "cover": "https://example.com/cover.jpg"
-    },
-    "sourceUrl": "https://en.wikipedia.org/wiki/Serendipity"
+    "image": "https://example.com/image.jpg",
+    "sourceUrl": "https://example.com/video.mp4"
   },
   {
-    "_说明": "本行仅为字段说明，导入时将被忽略。请确保 JSON格式正确。",
+    "_说明": "本行仅为字段说明，导入时将被忽略。请确保 JSON 格式正确。",
     "text": "【必填】单词拼写",
     "translation": "【建议填写】中文释义",
     "phoneticUs": "选填。美式音标",
     "phoneticUk": "选填。英式音标",
     "partOfSpeech": "选填。词性简写 (n. v. adj. adv. 等)",
     "englishDefinition": "选填。英文定义",
-    "contextSentence": "选填。上下文原句 (Source Sentence)",
-    "contextSentenceTranslation": "选填。原句中文翻译",
-    "mixedSentence": "选填。中英混合例句 (单词替换后的句子)",
-    "dictionaryExample": "选填。词典标准例句",
-    "dictionaryExampleTranslation": "选填。词典例句翻译",
-    "inflections": "选填。字符串数组（重点）。单词的变形列表 (如复数、过去式、分词)，用于网页端的词态自动匹配。例如: ['books', 'booking', 'booked']",
-    "tags": "选填。字符串数组。单词标签 (如考试等级、学科)。例如: ['CET4', 'Computer']",
-    "importance": "选填。数字 (0-5)。柯林斯星级 (Collins Stars)，5为最高频。",
-    "cocaRank": "选填。数字。COCA 语料库词频排名，数值越小越常用。",
-    "phrases": "选填。对象数组。常用短语。格式: [{ 'text': '短语英文', 'trans': '短语中文' }]",
-    "roots": "选填。对象数组。词根词缀。格式: [{ 'root': '词根', 'words': [{ 'text': '同根词', 'trans': '释义' }] }]",
-    "synonyms": "选填。对象数组。近义词。格式: [{ 'text': '近义词', 'trans': '释义' }]",
-    "image": "选填。图片 URL 链接",
-    "sourceUrl": "选填。来源 URL (文章链接或视频链接)"
+    "dictionaryExample": "选填。词典/标准例句",
+    "dictionaryExampleTranslation": "选填。词典例句对应翻译",
+    "contextSentence": "选填。网页原句 (Context)",
+    "contextSentenceTranslation": "选填。网页原句翻译",
+    "inflections": "选填。字符串数组。单词的变形列表。",
+    "tags": "选填。字符串数组。单词标签 (如: ['CET4', 'Computer'])",
+    "importance": "选填。数字 (0-5)。柯林斯星级 (Collins Stars)。",
+    "cocaRank": "选填。数字。COCA 语料库词频排名。",
+    "phrases": "选填。对象数组。格式: [{ 'text': '短语', 'trans': '释义' }]",
+    "roots": "选填。对象数组。格式: [{ 'root': '词根', 'words': [{ 'text': '同根词', 'trans': '释义' }] }]",
+    "synonyms": "选填。对象数组。格式: [{ 'text': '近义词', 'trans': '释义' }]",
+    "image": "选填。图片链接 (URL)",
+    "sourceUrl": "选填。视频或来源地址 (URL)"
   }
 ];
 
