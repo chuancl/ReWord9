@@ -45,7 +45,7 @@ interface MappingConfig {
     path: string;
     field: string;
     weight: number; 
-    isBase?: boolean;
+    isBase?: boolean; // 是否为基本信息（全局生效）
 }
 
 interface ListConfig {
@@ -304,6 +304,9 @@ export const BatchDataGenerator: React.FC = () => {
         );
     };
 
+    /**
+     * 解析引擎重构：支持深度嵌套笛卡尔积和上下文继承
+     */
     const runGeneration = async (isFull: boolean) => {
         const words = isFull ? importedWords : importedWords.slice(0, 1);
         if (words.length === 0) { showToast('请先导入单词列表', 'warning'); return; }
@@ -313,12 +316,12 @@ export const BatchDataGenerator: React.FC = () => {
         const mappingConfigs = mappings;
         const listPaths = new Set(lists.map(l => l.path));
 
+        // 数据清洗工具：提取对象中的文本
         const sanitizeValue = (val: any) => {
             if (val === null || val === undefined) return '';
             if (typeof val === 'string') return val;
             if (typeof val === 'number') return val;
             if (typeof val === 'object') {
-                // 深度提取文本：如果是数组，取第一个；如果是对象，取常见的文本键
                 if (Array.isArray(val)) return sanitizeValue(val[0]);
                 const textKeys = ['text', 'value', 'word', 'name', 'chn_tran', 'tran', 'definition', 'i'];
                 for (const k of textKeys) {
@@ -335,6 +338,7 @@ export const BatchDataGenerator: React.FC = () => {
                 const data = await res.json();
                 const wordFinalEntries: any[] = [];
 
+                // 第一阶段：全局预提取基本信息 (isBase)
                 const globalBaseCandidates = new Map<string, Array<{value: any, weight: number}>>();
                 const collectBase = (n: any, p: string, d: number) => {
                     if (d > MAX_DEPTH) return;
@@ -347,14 +351,17 @@ export const BatchDataGenerator: React.FC = () => {
                 };
                 collectBase(data, 'root', 0);
 
+                // 第二阶段：核心递归遍历，支持分枝笛卡尔积
                 const finalize = (branchCandidates: Map<string, any[]>) => {
                     const entry: any = { text: word };
                     const allCands = new Map(branchCandidates);
+                    // 合并全局 Base 字段
                     globalBaseCandidates.forEach((vals, field) => {
                         const existing = allCands.get(field) || [];
                         allCands.set(field, [...existing, ...vals]);
                     });
 
+                    // 权重决议
                     allCands.forEach((vals, field) => {
                         const sorted = vals.sort((a, b) => a.weight - b.weight);
                         for (const item of sorted) {
@@ -365,6 +372,7 @@ export const BatchDataGenerator: React.FC = () => {
                         }
                     });
 
+                    // 后处理逻辑
                     if (entry.videoUrl) {
                         entry.video = { url: entry.videoUrl, title: entry.videoTitle || '讲解视频', cover: entry.videoCover || '' };
                         delete entry.videoUrl; delete entry.videoTitle; delete entry.videoCover;
@@ -377,25 +385,42 @@ export const BatchDataGenerator: React.FC = () => {
                     if (Object.keys(entry).length > 1) wordFinalEntries.push(entry);
                 };
 
+                /**
+                 * 嵌套递归解析：自动传递上下文
+                 * @param node 当前 JSON 节点
+                 * @param path 当前路径
+                 * @param inheritedCtx 继承自父级的字段池
+                 */
                 const traverse = (node: any, path: string, inheritedCtx: Map<string, any[]>, depth: number) => {
                     if (depth > MAX_DEPTH) return;
                     const nPath = normalizePath(path);
+                    
+                    // 1. 克隆父级上下文，准备本次深度的字段收集
                     const currentCtx = new Map();
                     inheritedCtx.forEach((v, k) => currentCtx.set(k, [...v]));
+
+                    // 2. 收集当前节点的“同级”非基本映射（例如 gramcat 层级的 partofspeech）
                     mappingConfigs.filter(m => m.path === nPath && !m.isBase).forEach(m => {
                         const vals = currentCtx.get(m.field) || [];
                         currentCtx.set(m.field, [...vals, { value: node, weight: m.weight }]);
                     });
 
+                    // 3. 循环点决议
                     if (listPaths.has(nPath) && node) {
                         const items = Array.isArray(node) ? node : [node];
                         items.forEach((item, idx) => {
                             const subPath = Array.isArray(node) ? `${path}.${idx}` : path;
+                            // 探测分枝内是否还有子列表标记
                             const hasSubList = Array.from(listPaths).some(lp => lp.startsWith(nPath + '.') && lp !== nPath);
-                            if (hasSubList && typeof item === 'object' && item !== null) Object.keys(item).forEach(k => traverse(item[k], `${subPath}.${k}`, currentCtx, depth + 1));
-                            else {
+                            
+                            if (hasSubList && typeof item === 'object' && item !== null) {
+                                // 还没到叶子列表：继续分号子列表递归，携带当前已收集的字段（Context）
+                                Object.keys(item).forEach(k => traverse(item[k], `${subPath}.${k}`, currentCtx, depth + 1));
+                            } else {
+                                // 到了最深层循环点（叶子列表）：收集该节点下所有映射并产出一个独立词条
                                 const leafCtx = new Map();
                                 currentCtx.forEach((v, k) => leafCtx.set(k, [...v]));
+
                                 const collectLeafValues = (ln: any, lp: string, ld: number) => {
                                     if (ld > MAX_DEPTH) return;
                                     const lnp = normalizePath(lp);
@@ -409,10 +434,15 @@ export const BatchDataGenerator: React.FC = () => {
                                 finalize(leafCtx);
                             }
                         });
-                    } else if (typeof node === 'object' && node !== null) Object.keys(node).forEach(k => traverse(node[k], `${path}.${k}`, currentCtx, depth + 1));
+                    } else if (typeof node === 'object' && node !== null) {
+                        // 普通对象：继续深挖寻找 LIST 或字段
+                        Object.keys(node).forEach(k => traverse(node[k], `${path}.${k}`, currentCtx, depth + 1));
+                    }
                 };
 
                 traverse(data, 'root', new Map(), 0);
+
+                // 兜底：如果完全没有 LIST 触发，则产出单一映射条目
                 if (wordFinalEntries.length === 0 && mappings.length > 0) {
                     const rootOnlyCtx = new Map();
                     const collectSimple = (sn: any, sp: string, sd: number) => {
@@ -426,11 +456,12 @@ export const BatchDataGenerator: React.FC = () => {
                     collectSimple(data, 'root', 0);
                     finalize(rootOnlyCtx);
                 }
+
                 allFinalResults.push(...wordFinalEntries);
             }
             setPreviewResult(allFinalResults);
             setSelectedPreviewIds(new Set(allFinalResults.map((_, i) => i)));
-            showToast(isFull ? `全量生成完成：产出 ${allFinalResults.length} 个条目` : '预览生成成功', 'success');
+            showToast(isFull ? `全量生成完成：共产出 ${allFinalResults.length} 个义项条目` : '预览生成成功', 'success');
         } catch (e: any) { showToast(`解析失败: ${e.message}`, 'error'); } 
         finally { setIsGenerating(false); }
     };
@@ -483,7 +514,7 @@ export const BatchDataGenerator: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-white">
-                        {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center"><Database className="w-12 h-12 mb-4 opacity-5"/><p>导入单词后开始配置。支持笛卡尔积解析。</p></div>}
+                        {jsonData ? renderNode('ROOT', jsonData, 'root', 0) : <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm p-12 text-center"><Database className="w-12 h-12 mb-4 opacity-5"/><p>导入单词后开始配置。支持深度分枝继承解析。</p></div>}
                     </div>
                     <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
                          <div className="flex gap-4 text-[10px] font-black text-slate-400 uppercase">
@@ -492,7 +523,7 @@ export const BatchDataGenerator: React.FC = () => {
                          </div>
                          <div className="flex gap-3">
                             <button onClick={() => runGeneration(false)} disabled={!jsonData || isGenerating} className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-2xl font-bold flex items-center gap-2 hover:bg-slate-50 transition active:scale-95"><Eye className="w-4 h-4" /> 义项预览</button>
-                            <button onClick={() => runGeneration(true)} disabled={!jsonData || isGenerating} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 hover:bg-black shadow-xl transition active:scale-95">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />} 批量生成</button>
+                            <button onClick={() => runGeneration(true)} disabled={!jsonData || isGenerating} className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black flex items-center gap-3 hover:bg-black shadow-xl transition active:scale-95">{isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5 fill-current" />} 批量全量生成</button>
                          </div>
                     </div>
                 </div>
